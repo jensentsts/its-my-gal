@@ -25,7 +25,7 @@ createApp({
             toastTimer = setTimeout(() => { toastMessage.value = ""; }, 2500);
         };
 
-        const unlockedGalleries = ref({ old_photo: false, ancient_mural: false, boss_awaken: false, elysia_possession: false, redemption_light: false, lina_possession: false, seraphine_possession: false, spirit_crystal_glow: false, avalon_seal: false });
+        const unlockedGalleries = ref({ old_photo: false, ancient_mural: false, boss_awaken: false, elysia_possession: false, redemption_light: false });
         
         const unlockedEndings = ref({});
         const fullEndingsList = window.ENDINGS;
