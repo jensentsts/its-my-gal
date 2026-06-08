@@ -1,0 +1,23 @@
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node (if applicable)
+node_modules/
+npm-debug.log*
+
+# Build output
+dist/
+build/
+
+# Temp files
+*.tmp
+*.log
