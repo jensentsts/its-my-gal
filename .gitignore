@@ -18,6 +18,9 @@ npm-debug.log*
 dist/
 build/
 
+# Resource packs (generated)
+resource-packs/*.zip
+
 # Temp files
 *.tmp
 *.log

@@ -1,0 +1,32 @@
+{
+  "name": "default",
+  "title": "幻象物语：阿瓦隆之觉醒",
+  "version": "1.0.0",
+  "author": "",
+  "description": "",
+  "format": "1.0.0",
+  "configs": {
+    "game": "config/game.json",
+    "home": "config/home.json",
+    "characters": "config/characters.json",
+    "scenes": "config/scenes.json",
+    "cgLibrary": "config/cg-library.json",
+    "items": "config/items.json",
+    "endings": "config/endings.json"
+  },
+  "chapters": {
+    "body_explore": "chapters/body_explore.json",
+    "desperate_route": "chapters/desperate_route.json",
+    "elysia_life": "chapters/elysia_life.json",
+    "exorcism_route": "chapters/exorcism_route.json",
+    "final_choice": "chapters/final_choice.json",
+    "forest_deep": "chapters/forest_deep.json",
+    "forest_explore": "chapters/forest_explore.json",
+    "main": "chapters/main.json",
+    "meet_elysia": "chapters/meet_elysia.json",
+    "possession_event": "chapters/possession_event.json",
+    "possession_prelude": "chapters/possession_prelude.json",
+    "redemption_route": "chapters/redemption_route.json",
+    "ruins_exploration": "chapters/ruins_exploration.json"
+  }
+}

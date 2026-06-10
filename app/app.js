@@ -1,0 +1,451 @@
+/**
+ * app/app.js
+ *
+ * Vue 3 应用入口 —— Galgame 的 UI 表现层。
+ *
+ * 架构：
+ *   本文件仅负责 Vue 组件的组装与模板渲染。
+ *   所有游戏逻辑由 GalEngine 内核处理（engine/），
+ *   所有故事数据由 game/ 目录或资源包提供，
+ *   composables/ 负责引擎 ↔ Vue 的桥接。
+ *
+ * 支持两种数据加载模式：
+ *   1. 静态导入（默认） —— 直接 import game/ 数据
+ *   2. 资源包加载 —— 通过 ResourceManager 从目录/ZIP 加载
+ */
+
+// 静态导入回退数据
+import * as GameData from '../game/index.js';
+import { useEngine } from './composables/use-engine.js';
+import { useScale }  from './composables/use-scale.js';
+import { useToast }  from './composables/use-toast.js';
+import { getDynamicItemDescription as getDynamicDesc, getItemIcon, getItemImage, getItemName } from '../engine/index.js';
+
+const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
+
+createApp({
+    setup() {
+        // ================================================================
+        //  引擎桥接
+        // ================================================================
+        const engineCtx = useEngine();
+
+        // 初始化引擎 —— 优先使用编辑器同步数据，回退到静态导入
+        const editorData = engineCtx.loadEditorData();
+        let engineInputData = GameData;
+        if (editorData && editorData.chapters) {
+            console.log('[App] 检测到编辑器同步数据，合并到引擎输入...');
+            engineInputData = {
+                ...GameData,
+                STORY_CHAPTERS: editorData.chapters,
+                CHARACTERS: editorData.characters || GameData.CHARACTERS,
+                SCENES: editorData.scenes || GameData.SCENES,
+                CG_LIBRARY: editorData.cgLibrary || GameData.CG_LIBRARY,
+                ITEMS: editorData.items || GameData.ITEMS,
+                ENDINGS: editorData.endings || GameData.ENDINGS,
+                GAME_CONFIG: editorData.config
+                    ? { ...GameData.GAME_CONFIG, ...editorData.config }
+                    : GameData.GAME_CONFIG,
+            };
+        }
+        engineCtx.initEngine(engineInputData);
+
+        // 同步游戏标题到页面 title
+        document.title = engineInputData.GAME_CONFIG?.title || '幻象物语：阿瓦隆之觉醒';
+
+        // ---- 资源包加载状态 ----
+        const packLoading = ref(false);
+        const packLoadProgress = ref({ percent: 0, status: '', detail: '' });
+        const packLoadError = ref('');
+        const packMeta = ref(null);
+
+        // ---- 辅助：从 engineCtx.gameData 获取当前活动数据源 ----
+        // 当使用静态导入时，gameData 指向 GameData
+        // 当从资源包加载时，gameData 指向资源包数据
+        function resolveData(key) {
+            return engineCtx.gameData.value?.[key] ?? GameData[key];
+        }
+
+        // ================================================================
+        //  缩放 & Toast
+        // ================================================================
+        const { scale, displayW, displayH, isLandscape, isMobile,
+                update: updateScale, onResize, onOrientationChange, cleanup: cleanupScale } = useScale(
+            resolveData('GAME_CONFIG')?.aspectRatio?.width || 1280,
+            resolveData('GAME_CONFIG')?.aspectRatio?.height || 720
+        );
+
+        const toast = useToast();
+
+        // ================================================================
+        //  派生计算属性（使用动态数据源）
+        // ================================================================
+        const currentStep = computed(() => {
+            const pool = resolveData('STORY_CHAPTERS')[engineCtx.currentChapterId.value];
+            if (!pool) return null;
+            return pool[engineCtx.currentStepIndex.value] || null;
+        });
+
+        const currentSpeakerId = computed(() =>
+            currentStep.value ? (currentStep.value.characterId || null) : null
+        );
+
+        const currentSpeakerName = computed(() => {
+            if (!currentSpeakerId.value) return '';
+            return resolveData('CHARACTERS')[currentSpeakerId.value]?.name || '';
+        });
+
+        const currentSpeakerColor = computed(() => {
+            if (!currentSpeakerId.value) return '#fff';
+            return resolveData('CHARACTERS')[currentSpeakerId.value]?.color || '#fff';
+        });
+
+        const currentAvatarUrl = computed(() => {
+            if (!currentSpeakerId.value) return '';
+            const char = resolveData('CHARACTERS')[currentSpeakerId.value];
+            if (!char) return '';
+            const spriteId = engineCtx.stageCharacters.value[currentSpeakerId.value]?.spriteId;
+            return char.avatars?.[spriteId] || char.avatars?.['normal'] || '';
+        });
+
+        const shouldShowAvatar = computed(() =>
+            currentSpeakerId.value && currentSpeakerId.value !== engineCtx.lastSpeakerId.value
+        );
+
+        const availableChoices = computed(() =>
+            currentStep.value ? (currentStep.value.choices || []) : []
+        );
+
+        const viewportStyle = computed(() => {
+            const cfg = resolveData('GAME_CONFIG');
+            return {
+                width: `${cfg?.aspectRatio?.width || 1280}px`,
+                height: `${cfg?.aspectRatio?.height || 720}px`,
+                transform: `translate(-50%, -50%) scale(${scale.value})`,
+                '--viewport-scale': scale.value,
+                '--viewport-display-width': `${displayW.value}px`,
+                '--viewport-display-height': `${displayH.value}px`,
+            };
+        });
+
+        const backgroundStyle = computed(() => {
+            if (!currentStep.value?.sceneId) return { background: '#000' };
+            const sc = resolveData('SCENES')[currentStep.value.sceneId];
+            if (!sc) return { background: '#000' };
+            if (sc.url && !engineCtx.sceneBgFailed.value) {
+                return { backgroundImage: `url(${sc.url})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+            }
+            return { background: sc.bgPlaceholder || '#111' };
+        });
+
+        const homeBackgroundStyle = computed(() => {
+            const hc = resolveData('HOME_CONFIG');
+            if (hc?.backgroundUrl) return { backgroundImage: `url(${hc.backgroundUrl})` };
+            return { background: hc?.placeholderGradient || '#0e0e14' };
+        });
+
+        const homeEffectMaskClasses = computed(() => {
+            const hc = resolveData('HOME_CONFIG');
+            return hc?.maskEffects ? hc.maskEffects.map(e => `fx-${e}`) : [];
+        });
+
+        const effectMaskClasses = computed(() =>
+            engineCtx.activeEffects.value.map(e => `fx-${e}`)
+        );
+
+        // 角色名录
+        const inspectedChar = computed(() => {
+            if (!engineCtx.activeInspectedCharId.value) return null;
+            return resolveData('CHARACTERS')[engineCtx.activeInspectedCharId.value] || null;
+        });
+
+        const activeInspectedSpriteLabel = computed(() => {
+            if (!inspectedChar.value || !engineCtx.activeSpriteIdForInspection.value) return '';
+            return inspectedChar.value.sprites?.[engineCtx.activeSpriteIdForInspection.value]?.label || '';
+        });
+
+        const getArchiveEmoji = computed(() =>
+            activeInspectedSpriteLabel.value.split(' ')[0] || '👤'
+        );
+
+        // 物品动态描述
+        const inspectedItemDynamicDescription = computed(() => {
+            if (!engineCtx.selectedBagItemId.value) return '';
+            // 使用 engine 层的 getDynamicItemDescription（通过 gameData 中的 items）
+            const items = resolveData('ITEMS');
+            const flags = engineCtx.gameState.value.flags;
+            return getDynamicDesc(engineCtx.selectedBagItemId.value, flags, items);
+        });
+
+        // ================================================================
+        //  资源包加载
+        // ================================================================
+        async function loadResourcePack(packPath) {
+            packLoading.value = true;
+            packLoadError.value = '';
+            packLoadProgress.value = { percent: 0, status: 'init', detail: '开始加载资源包...' };
+
+            try {
+                await engineCtx.loadPackFromPath(packPath, (progress) => {
+                    packLoadProgress.value = progress;
+                });
+                packMeta.value = engineCtx.getPackMeta();
+                toast.show(`资源包 "${packMeta.value?.packTitle || packMeta.value?.packName}" 加载成功！`);
+            } catch (e) {
+                packLoadError.value = e.message;
+                toast.show(`资源包加载失败: ${e.message}`, 'info');
+            } finally {
+                packLoading.value = false;
+            }
+        }
+
+        async function importResourcePack(zipFile) {
+            packLoading.value = true;
+            packLoadError.value = '';
+
+            try {
+                await engineCtx.importPackFromZip(zipFile);
+                packMeta.value = engineCtx.getPackMeta();
+                toast.show(`资源包 "${packMeta.value?.packTitle || packMeta.value?.packName}" 导入成功！`);
+            } catch (e) {
+                packLoadError.value = e.message;
+                toast.show(`资源包导入失败: ${e.message}`, 'info');
+            } finally {
+                packLoading.value = false;
+            }
+        }
+
+        // ================================================================
+        //  操作方法
+        // ================================================================
+
+        function openArchiveSlotsPanel(mode) {
+            engineCtx.archiveMode.value = mode;
+            engineCtx.loadSaveSlots();
+            if (engineCtx.currentView.value === 'menu') {
+                engineCtx.activeMenuPanel.value = 'archiveSlots';
+                engineCtx.activeGamePanel.value = null;
+            } else {
+                engineCtx.activeGamePanel.value = 'archiveSlots';
+                engineCtx.activeMenuPanel.value = null;
+            }
+        }
+
+        function executeSlotSave(slotId) {
+            const now = new Date();
+            const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+            const step = currentStep.value;
+            let bgRender = '#111';
+            let sceneUrl = null;
+            if (step?.sceneId) {
+                const sc = resolveData('SCENES')[step.sceneId];
+                if (sc) { bgRender = sc.bgPlaceholder || '#111'; sceneUrl = sc.url || null; }
+            }
+
+            const ok = engineCtx.saveGame(slotId, {
+                bgRenderStyle: bgRender,
+                sceneBgUrl: sceneUrl,
+                cgUrl: engineCtx.activeCG.value?.url || null,
+                textBrief: step?.text ? step.text.substring(0, 14) + '...' : '分支选择中',
+                speaker: currentSpeakerName.value || null,
+                saveTime: timeStr,
+            });
+
+            if (ok) toast.show(`时空节点 SLOT-${slotId} 保存成功！`);
+        }
+
+        function executeSlotLoad(slotId) {
+            const ok = engineCtx.loadGame(slotId);
+            if (ok) {
+                toast.show(`已成功跃迁至节点 SLOT-${slotId}`);
+            }
+        }
+
+        function executeSlotClear(slotId) {
+            const ok = engineCtx.clearSaveSlot(slotId);
+            if (ok) toast.show(`时空文件 SLOT-${slotId} 已粉碎清空。`, 'info');
+        }
+
+        function handleGameViewRightClick(e) {
+            engineCtx.uiVisible.value = !engineCtx.uiVisible.value;
+        }
+
+        function startNewGame() {
+            engineCtx.startNewGame();
+            nextTick(() => updateScale());
+        }
+
+        function safelyExitToMenu() {
+            engineCtx.clearGameEffects();
+            engineCtx.currentView.value = 'menu';
+            engineCtx.activeGamePanel.value = null;
+            engineCtx.activeMenuPanel.value = null;
+            engineCtx.loadSaveSlots();
+            engineCtx.initHomeEffects(resolveData('HOME_CONFIG'));
+        }
+
+        function globalAdvance() {
+            if (engineCtx.currentView.value !== 'game') return;
+            if (!engineCtx.uiVisible.value) return;
+            if (engineCtx.stageDisplayItem.value) return;
+            if (currentStep.value?.type === 'choice') return;
+            if (engineCtx.triggeredEnding.value) return;
+            engineCtx.advanceStory();
+        }
+
+        function advanceStory() {
+            engineCtx.advanceStory();
+        }
+
+        function selectChoice(choice) {
+            engineCtx.selectChoice(choice);
+        }
+
+        function rollbackToTimeline(logIndex) {
+            const ok = engineCtx.rollbackToTimeline(logIndex);
+            if (ok) toast.show('已成功返回至历史该剧情点', 'info');
+        }
+
+        function exitToMenu() {
+            engineCtx.clearGameEffects();
+            engineCtx.currentView.value = 'menu';
+            engineCtx.loadSaveSlots();
+            engineCtx.initHomeEffects(resolveData('HOME_CONFIG'));
+        }
+
+        function queryItemIcon(itemId) { return getItemIcon(itemId, resolveData('ITEMS')); }
+        function queryItemImage(itemId) { return getItemImage(itemId, resolveData('ITEMS')); }
+        function queryItemName(itemId) { return getItemName(itemId, resolveData('ITEMS')); }
+
+        function dismissItemStageToast() {
+            engineCtx.dismissItemStageToast();
+        }
+
+        // 角色名录
+        function openCharactersPanel() {
+            engineCtx.activeMenuPanel.value = 'characters';
+            const firstId = Object.keys(resolveData('CHARACTERS'))[0] || null;
+            switchInspectedCharacter(firstId);
+        }
+
+        function switchInspectedCharacter(charId) {
+            engineCtx.activeInspectedCharId.value = charId;
+            if (charId && resolveData('CHARACTERS')[charId]) {
+                const firstSprite = Object.keys(resolveData('CHARACTERS')[charId].sprites)[0] || null;
+                switchInspectedSprite(firstSprite);
+            }
+        }
+
+        function switchInspectedSprite(spriteId) {
+            engineCtx.activeSpriteIdForInspection.value = spriteId;
+            if (inspectedChar.value && spriteId) {
+                engineCtx.activeInspectedSpriteUrl.value = inspectedChar.value.sprites[spriteId]?.url || '';
+            } else {
+                engineCtx.activeInspectedSpriteUrl.value = '';
+            }
+        }
+
+        function handleArchiveSpriteError() {
+            engineCtx.activeInspectedSpriteUrl.value = '';
+        }
+
+        function clickGalleryItem(id) {
+            if (engineCtx.unlockedGalleries.value[id]) {
+                openLightbox(resolveData('CG_LIBRARY')[id]?.url);
+            }
+        }
+
+        function openLightbox(url) { if (url) engineCtx.lightboxUrl.value = url; }
+        function closeLightbox() { engineCtx.lightboxUrl.value = ''; }
+
+        function openInventoryPanel() {
+            engineCtx.showInventory.value = true;
+            const inv = engineCtx.gameState.value.inventory;
+            engineCtx.selectedBagItemId.value = inv.length > 0 ? inv[0] : null;
+        }
+
+        function selectItemForInspection(itemId) {
+            engineCtx.selectedBagItemId.value = itemId;
+        }
+
+        // 辅助
+        function getCharName(id)  { return resolveData('CHARACTERS')[id]?.name || id; }
+        function getCharColor(id) { return resolveData('CHARACTERS')[id]?.color || '#fff'; }
+        function getCharMeta(id)  { return `${resolveData('CHARACTERS')[id]?.race || '人类'} · ${resolveData('CHARACTERS')[id]?.gender || '?'}`; }
+        function getCharEmoji(id, sid) { return resolveData('CHARACTERS')[id]?.sprites?.[sid]?.label?.split(' ')[0] || '👤'; }
+
+        function hexToRgb(hex) {
+            let c = hex.substring(1);
+            if (c.length === 3) c = c[0]+c[0]+c[1]+c[1]+c[2]+c[2];
+            const x = parseInt(c, 16);
+            return `${(x >> 16) & 255}, ${(x >> 8) & 255}, ${x & 255}`;
+        }
+
+        function handleSpriteError(charId) {
+            const s = engineCtx.stageCharacters.value;
+            if (s[charId]) s[charId].url = '';
+        }
+
+        function onSceneBgError() {
+            engineCtx.onSceneBgError();
+        }
+
+        // ================================================================
+        //  生命周期
+        // ================================================================
+        onMounted(() => {
+            updateScale();
+            window.addEventListener('resize', onResize);
+            window.addEventListener('orientationchange', onOrientationChange);
+            if (window.matchMedia) {
+                const mq = window.matchMedia('(orientation: portrait)');
+                if (mq.addEventListener) mq.addEventListener('change', onOrientationChange);
+            }
+            engineCtx.loadSaveSlots();
+            engineCtx.initHomeEffects(resolveData('HOME_CONFIG'));
+        });
+
+        onUnmounted(() => {
+            cleanupScale();
+            engineCtx.destroy();
+        });
+
+        // ================================================================
+        //  模板暴露
+        // ================================================================
+        return {
+            // 引擎状态
+            ...engineCtx,
+            // 资源包状态
+            packLoading, packLoadProgress, packLoadError, packMeta,
+            loadResourcePack, importResourcePack,
+            // Toast
+            toastMessage: toast.message,
+            toastType: toast.type,
+            // 计算属性
+            currentStep, currentSpeakerId, currentSpeakerName, currentSpeakerColor,
+            currentAvatarUrl, shouldShowAvatar, availableChoices,
+            viewportStyle, backgroundStyle, homeBackgroundStyle,
+            homeEffectMaskClasses, effectMaskClasses,
+            inspectedChar, activeInspectedSpriteLabel, getArchiveEmoji,
+            inspectedItemDynamicDescription,
+            // 数据引用（动态）
+            configTitle: computed(() => resolveData('GAME_CONFIG')?.title || ''),
+            homeConfig: computed(() => resolveData('HOME_CONFIG')),
+            assetsCharacters: computed(() => resolveData('CHARACTERS')),
+            assetsCgLibrary: computed(() => resolveData('CG_LIBRARY')),
+            fullEndingsList: computed(() => resolveData('ENDINGS')),
+            // 方法（保持与原模板同名）
+            startNewGame, advanceStory, selectChoice, rollbackToTimeline,
+            exitToMenu, safelyExitToMenu, openCharactersPanel, switchInspectedCharacter,
+            switchInspectedSprite, handleArchiveSpriteError,
+            openArchiveSlotsPanel, executeSlotSave, executeSlotLoad, executeSlotClear,
+            handleGameViewRightClick, clickGalleryItem, openLightbox, closeLightbox,
+            getCharName, getCharColor, getCharMeta, getCharEmoji, hexToRgb,
+            queryItemIcon, queryItemImage, queryItemName,
+            openInventoryPanel, selectItemForInspection,
+            globalAdvance, dismissItemStageToast, onSceneBgError,
+        };
+    }
+}).mount('#app');

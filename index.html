@@ -7,256 +7,41 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>幻象物语：阿瓦隆之觉醒</title>
+
+    <!-- Vue 3 CDN -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="js/config.js"></script>
-    <script src="js/assets.js"></script>
-    <script src="js/story.js"></script>
-    <link rel="stylesheet" href="css/game.css">
-    <link rel="stylesheet" href="css/effects.css">
-    <style>
-        /* 主页视图：引入图像注入接口与多重特效层 */
-        .menu-view { 
-            width: 100vw; 
-            height: 100vh; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
-            background-size: cover;
-            background-position: center;
-            position: relative; 
-        }
-        
-        .menu-dark-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #000000;
-            pointer-events: none;
-            z-index: 1;
-        }
 
-        #home-particles-container {
-            z-index: 2;
-        }
+    <!-- JSZip（资源包 ZIP 导入支持） -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
-        .menu-container { 
-            text-align: center; 
-            z-index: 10; 
-            position: relative;
-        }
-        .menu-container h1 { font-size: 3.5rem; margin-bottom: 3rem; letter-spacing: 6px; font-family: serif; text-shadow: 0 0 20px rgba(255,255,255,0.1), 2px 2px 0px #ff6b81; }
-        .menu-buttons { display: flex; flex-direction: column; gap: 1.2rem; align-items: center; }
-        .btn { width: 280px; padding: 15px 30px; font-size: 1.1rem; font-weight: bold; color: #fff; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.12); border-radius: 30px; cursor: pointer; transition: all 0.3s ease; letter-spacing: 2px; }
-        .btn:hover { background: #fff; color: #111; transform: translateY(-2px); box-shadow: 0 10px 20px rgba(255,255,255,0.1); }
-        
-        .sub-panel { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(6, 6, 9, 0.99); z-index: 1000; padding: 40px; overflow-y: auto; }
-        .panel-header { display: flex; justify-content: space-between; align-items: center; max-width: 1300px; margin: 0 auto 30px; border-bottom: 1px solid #1c1c24; padding-bottom: 20px; }
-        .close-btn { background: none; border: 1px solid #ff6b81; color: #ff6b81; padding: 8px 24px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .close-btn:hover { background: #ff6b81; color: #fff; }
-        
-        .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 30px; max-width: 1300px; margin: 0 auto 40px; }
-        .gallery-item { border-radius: 12px; overflow: hidden; border: 1px solid #1c1c24; position: relative; background: #030305; aspect-ratio: 16/9; cursor: pointer; }
-        .gallery-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
-        .gallery-item:hover img { transform: scale(1.03); }
-        .gallery-locked { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #444; font-size: 0.95rem; background: #07070a; cursor: not-allowed; }
-
-        .effect-canvas-container { position: absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
-
-        .cg-overlay-viewport { pointer-events: none !important; }
-        .cg-img-content { pointer-events: none !important; cursor: default !important; }
-
-        .stage-floating-control-rack {
-            position: absolute;
-            right: 25px;
-            bottom: 145px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            z-index: 90;
-            transition: opacity 0.3s;
-        }
-        .rack-glass-btn {
-            width: 52px;
-            height: 52px;
-            border-radius: 50%;
-            background: rgba(10, 10, 15, 0.75);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            color: rgba(255, 255, 255, 0.85);
-            font-size: 1.2rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .rack-glass-btn:hover {
-            background: #fff;
-            color: #111;
-            transform: scale(1.08) translateY(-2px);
-            box-shadow: 0 6px 16px rgba(255,255,255,0.2);
-            border-color: #fff;
-        }
-        .dialogue-panel { padding-right: 40px; }
-        
-        .item-inspect-card {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
-            padding: 16px;
-            margin-top: 20px;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
-        .item-inspect-icon { font-size: 2.5rem; background: rgba(255,255,255,0.04); width: 64px; height: 64px; display:flex; align-items:center; justify-content:center; border-radius:8px; border: 1px solid rgba(255,255,255,0.1); }
-        .item-inspect-detail { flex-grow: 1; }
-        .item-inspect-detail h5 { font-size: 1.1rem; color: #ff6b81; margin-bottom: 5px; }
-        .item-inspect-detail p { font-size: 0.88rem; color: #ccc; line-height: 1.5; }
-
-        .item-list li.clickable-item {
-            cursor: pointer;
-            transition: all 0.2s;
-            padding: 8px 12px;
-            border-radius: 6px;
-            border: 1px solid transparent;
-        }
-        .item-list li.clickable-item:hover {
-            background: rgba(255, 107, 129, 0.15);
-            border-color: rgba(255, 107, 129, 0.3);
-            transform: translateX(4px);
-        }
-        .item-list li.clickable-item.selected-item {
-            background: rgba(255, 107, 129, 0.25);
-            border-color: rgba(255, 107, 129, 0.5);
-        }
-
-        .item-toast-layer {
-            position: absolute;
-            top: 40%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 500;
-            background: rgba(10, 10, 15, 0.95);
-            border: 2px solid rgba(255, 255, 255, 0.15);
-            border-radius: 16px;
-            width: 380px;
-            padding: 25px;
-            text-align: center;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
-            pointer-events: auto;
-            transition: opacity 0.3s, transform 0.3s;
-        }
-        .item-toast-badge { font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; display: inline-block; padding: 4px 12px; border-radius: 12px; font-weight: bold; background: rgba(255,255,255,0.06); }
-        .item-toast-layer.fx-item-find .item-toast-badge { color: #ffd700; background: rgba(255,215,0,0.1); }
-        .item-toast-layer.fx-item-receive .item-toast-badge { color: #2ecc71; background: rgba(46,204,113,0.1); }
-        .item-toast-layer.fx-item-unlock .item-toast-badge { color: #9b59b6; background: rgba(155,89,182,0.1); }
-        .item-toast-layer.fx-item-use .item-toast-badge { color: #3498db; background: rgba(52,152,219,0.1); }
-        .item-toast-layer.fx-item-destroy .item-toast-badge { color: #e74c3c; background: rgba(231,76,60,0.1); }
-        .item-toast-layer.fx-item-give .item-toast-badge { color: #e67e22; background: rgba(230,126,34,0.1); }
-        
-        .item-toast-avatar { font-size: 3.5rem; margin-bottom: 15px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3)); }
-        .item-toast-name { font-size: 1.4rem; font-weight: bold; margin-bottom: 8px; font-family: serif; letter-spacing: 1px; color: #fff; }
-        .item-toast-desc { font-size: 0.9rem; color: #aaa; line-height: 1.6; text-align: left; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.03); }
-        .item-toast-close-tip { margin-top: 15px; font-size: 0.75rem; color: #666; letter-spacing: 1px; animation: pulse 1.5s infinite; }
-
-        .ending-gallery-section {
-            max-width: 1300px;
-            margin: 40px auto 0;
-            border-top: 1px solid #1c1c24;
-            padding-top: 30px;
-        }
-        .ending-gallery-section h3 { font-size: 1.6rem; font-family: serif; margin-bottom: 20px; letter-spacing: 2px; color: #ff6b81; }
-        .ending-matrix-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
-        .ending-card-badge { background: #060609; border: 1px solid #1c1c24; border-radius: 10px; padding: 20px; position: relative; transition: all 0.3s; }
-        .ending-card-badge.unlocked { border-color: rgba(255, 107, 129, 0.4); background: linear-gradient(145deg, #09090e 0%, #040406 100%); box-shadow: 0 4px 15px rgba(255,107,129,0.05); }
-        .ending-badge-status { font-size: 0.75rem; font-weight: bold; letter-spacing: 1px; color: #444; margin-bottom: 8px; }
-        .ending-card-badge.unlocked .ending-badge-status { color: #ff6b81; }
-        .ending-badge-title { font-size: 1.1rem; font-family: serif; color: #555; margin-bottom: 6px; }
-        .ending-card-badge.unlocked .ending-badge-title { color: #fff; text-shadow: 0 0 5px rgba(255,255,255,0.1); }
-        .ending-badge-desc { font-size: 0.85rem; color: #333; line-height: 1.5; }
-        .ending-card-badge.unlocked .ending-badge-desc { color: #999; }
-
-        /* ========== 修复对话框位置 ========== */
-        .dialogue-panel {
-            bottom: 20px !important;
-        }
-
-        /* ========== 向下箭头指示器 ========== */
-        .next-arrow {
-            position: absolute;
-            right: 20px;
-            bottom: 20px;
-            width: 36px;
-            height: 36px;
-            background: rgba(255, 107, 129, 0.8);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.6rem;
-            font-weight: bold;
-            color: white;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            z-index: 45;
-            animation: bounceArrow 1.2s infinite;
-        }
-        .next-arrow:hover {
-            transform: scale(1.1);
-            background: rgba(255, 107, 129, 1);
-            box-shadow: 0 0 12px rgba(255,107,129,0.6);
-        }
-        @keyframes bounceArrow {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(4px); }
-        }
-
-        /* 全局点击推进剧情遮罩提示（可选） */
-        .game-click-area {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 35;
-            cursor: pointer;
-            pointer-events: auto;
-        }
-        /* 让分支选项、按钮、侧边栏等区域不触发全局点击 */
-        .choices-container,
-        .side-panel-mask,
-        .side-panel,
-        .game-top-dock-bar,
-        .stage-floating-control-rack,
-        .item-toast-layer,
-        .sub-panel,
-        .ending-screen {
-            pointer-events: auto;
-        }
-        /* 全局点击区域需要置于对话面板之下，但高于背景，以免影响对话面板的点击 */
-        .game-viewport {
-            position: relative;
-        }
-    </style>
+    <!-- 样式表（按层级加载） -->
+    <link rel="stylesheet" href="app/styles/base.css">
+    <link rel="stylesheet" href="app/styles/effects.css">
+    <link rel="stylesheet" href="app/styles/game.css">
+    <link rel="stylesheet" href="app/styles/menu.css">
 </head>
 <body>
     <div id="app" v-cloak>
-        
+
+        <!-- ============================================================ -->
+        <!--  全局通知 Toast                                              -->
+        <!-- ============================================================ -->
         <div class="toast-alert-notification" :class="{'info-theme': toastType === 'info'}" v-if="toastMessage">
             {{ toastMessage }}
         </div>
 
+        <!-- ============================================================ -->
+        <!--  CG 灯箱                                                     -->
+        <!-- ============================================================ -->
         <div class="cg-lightbox-modal" :class="{'modal-active': lightboxUrl}" @click="closeLightbox">
             <img :src="lightboxUrl" class="lightbox-large-img" @click.stop>
         </div>
 
+        <!-- ============================================================ -->
+        <!--  主菜单视图                                                   -->
+        <!-- ============================================================ -->
         <div class="menu-view" v-if="currentView === 'menu'" :style="homeBackgroundStyle">
-            
+
             <div class="menu-dark-overlay" v-if="homeConfig.showOverlay" :style="{ opacity: homeConfig.overlayOpacity || 0.5 }"></div>
 
             <div class="screen-mask-overlay" :class="homeEffectMaskClasses"></div>
@@ -272,15 +57,16 @@
                 </div>
             </div>
 
+            <!-- 角色名录面板 -->
             <div class="archive-panel-fullscreen" v-if="activeMenuPanel === 'characters'">
                 <div class="archive-header-fluid">
                     <h2>角色名录详存</h2>
                     <button class="close-btn" @click="activeMenuPanel = null">返回主视图</button>
                 </div>
-                
+
                 <div class="archive-container-layout" v-if="activeInspectedCharId">
                     <div class="archive-left-nav">
-                        <div class="archive-nav-item" 
+                        <div class="archive-nav-item"
                              v-for="(char, id) in assetsCharacters" :key="id"
                              :class="{ active: activeInspectedCharId === id }"
                              :style="{ '--char-color': char.color, '--char-rgb': hexToRgb(char.color) }"
@@ -320,7 +106,7 @@
                             </div>
                             <div class="expression-matrix-title">形态立绘与表情差分镜像</div>
                             <div class="expression-grid-layout">
-                                <div class="expression-chip" 
+                                <div class="expression-chip"
                                      v-for="sp in inspectedChar.sprites" :key="sp.id"
                                      :class="{ active: activeSpriteIdForInspection === sp.id }"
                                      @click="switchInspectedSprite(sp.id)">
@@ -332,12 +118,13 @@
                 </div>
             </div>
 
+            <!-- 画廊面板 -->
             <div class="sub-panel" v-if="activeMenuPanel === 'gallery'">
                 <div class="panel-header">
                     <h2>艺术画廊图鉴</h2>
                     <button class="close-btn" @click="activeMenuPanel = null">返回主视图</button>
                 </div>
-                
+
                 <div class="gallery-grid">
                     <div class="gallery-item" v-for="(cg, id) in assetsCgLibrary" :key="id" @click="clickGalleryItem(id)">
                         <div v-if="unlockedGalleries[id]" style="width:100%; height:100%;">
@@ -354,7 +141,7 @@
                 <div class="ending-gallery-section">
                     <h3>🎬 编年史分歧结局收集</h3>
                     <div class="ending-matrix-grid">
-                        <div class="ending-card-badge" 
+                        <div class="ending-card-badge"
                              v-for="end in fullEndingsList" :key="end.id"
                              :class="{ unlocked: unlockedEndings[end.id] }">
                             <div class="ending-badge-status">
@@ -371,6 +158,7 @@
                 </div>
             </div>
 
+            <!-- 存档面板（菜单用） -->
             <div class="sub-panel" v-if="activeMenuPanel === 'archiveSlots'">
                 <div class="panel-header">
                     <h2>历史时空跳转节点（16格）</h2>
@@ -383,11 +171,9 @@
                             <span>{{ saveSlotsData[slotId] ? 'DATA EXIST' : 'EMPTY' }}</span>
                         </div>
                         <div class="slot-thumbnail-pane">
-                            <!-- 优先显示场景背景图，如果没有则显示背景样式 -->
-                            <div v-if="saveSlotsData[slotId]" :style="{background: saveSlotsData[slotId].bgRenderStyle, width:'100%', height:'100%', position:'relative'}">
-                                <img v-if="saveSlotsData[slotId].sceneBgUrl" :src="saveSlotsData[slotId].sceneBgUrl" class="thumbnail-image-render" @error="e => e.target.style.display='none'">
-                                <!-- 如果没有场景图，显示占位符文字 -->
-                                <div v-if="!saveSlotsData[slotId].sceneBgUrl" style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; color:#555;">No Preview</div>
+                            <div v-if="saveSlotsData[slotId]" :style="{background: saveSlotsData[slotId].bgRenderStyle || saveSlotsData[slotId].bgPlaceholder || '#111', width:'100%', height:'100%', position:'relative'}">
+                                <img v-if="saveSlotsData[slotId].sceneBgUrl || saveSlotsData[slotId].sceneUrl" :src="saveSlotsData[slotId].sceneBgUrl || saveSlotsData[slotId].sceneUrl" class="thumbnail-image-render" @error="e => e.target.style.display='none'">
+                                <div v-if="!(saveSlotsData[slotId].sceneBgUrl || saveSlotsData[slotId].sceneUrl)" style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; color:#555;">No Preview</div>
                             </div>
                             <div v-else class="thumbnail-empty-placeholder">
                                 <div class="tree-node-icon"></div>
@@ -408,12 +194,16 @@
             </div>
         </div>
 
+        <!-- ============================================================ -->
+        <!--  游戏主视图                                                   -->
+        <!-- ============================================================ -->
         <div class="game-view" v-if="currentView === 'game'" @contextmenu.prevent="handleGameViewRightClick">
             <div class="game-viewport" :style="viewportStyle">
-                
-                <!-- 全局点击推进区域（仅当可推进时触发） -->
+
+                <!-- 全局点击推进区域 -->
                 <div class="game-click-area" @click="globalAdvance"></div>
 
+                <!-- 顶部导航栏 -->
                 <div class="game-top-dock-bar" @click.stop v-show="uiVisible">
                     <div class="dock-left-group">
                         <button class="dock-action-btn exit-btn" @click="safelyExitToMenu">🚪 退出暂存</button>
@@ -424,35 +214,44 @@
                     </div>
                 </div>
 
+                <!-- 场景背景 -->
                 <div class="scene-background" :style="backgroundStyle"></div>
-                <!-- 隐藏的图片预加载用于检测场景背景是否失效 -->
                 <img v-if="currentSceneTestUrl" :src="currentSceneTestUrl" style="display:none;" @error="onSceneBgError">
-                
+
+                <!-- CG 叠加层 -->
                 <div class="cg-overlay-viewport" v-if="activeCG" :class="activeCG.animation">
                     <img :src="activeCG.url" class="cg-img-content" :class="activeCG.effectClass">
                 </div>
-                
+
+                <!-- 屏幕特效遮罩 -->
                 <div class="screen-mask-overlay" :class="effectMaskClasses"></div>
                 <div id="particles-container" class="effect-canvas-container"></div>
 
+                <!-- 浮动控制栏 -->
                 <div class="stage-floating-control-rack" v-show="uiVisible" @click.stop>
                     <button class="rack-glass-btn" @click="showLog = true" title="历史剧情回放">📋</button>
                     <button class="rack-glass-btn" @click="openInventoryPanel" title="随身背包物资">🎒</button>
                 </div>
 
-                <div class="item-toast-layer" 
-                     v-if="stageDisplayItem" 
+                <!-- 物品展示 Toast -->
+                <div class="item-toast-layer"
+                     v-if="stageDisplayItem"
                      :class="stageDisplayItem.animClass"
                      @click.stop="dismissItemStageToast">
                     <div class="item-toast-badge">{{ stageDisplayItem.titleLabel }}</div>
-                    <div class="item-toast-avatar">{{ stageDisplayItem.icon }}</div>
+                    <div class="item-toast-avatar">
+                        <img v-if="stageDisplayItem.image" :src="stageDisplayItem.image"
+                             class="item-toast-img" @error="e => { e.target.style.display='none'; e.target.parentElement.innerText = stageDisplayItem.icon; }" />
+                        <span v-else>{{ stageDisplayItem.icon }}</span>
+                    </div>
                     <div class="item-toast-name">{{ stageDisplayItem.name }}</div>
                     <div class="item-toast-desc">{{ stageDisplayItem.description }}</div>
                     <div class="item-toast-close-tip">点击任意区域关闭展示，或等待自动推进队列</div>
                 </div>
 
+                <!-- 角色立绘舞台 -->
                 <div class="stage-container" v-show="uiVisible" :style="{ opacity: uiVisible ? 1 : 0 }">
-                    <div v-for="(state, charId) in stageCharacters" :key="charId" 
+                    <div v-for="(state, charId) in stageCharacters" :key="charId"
                          class="stage-character" :class="[state.animation, { 'inactive-mask': currentSpeakerId !== charId }]">
                         <img v-if="state.url" :src="state.url" @error="handleSpriteError(charId)" class="character-img">
                         <div v-else class="fallback-placeholder" :style="{'--char-color': getCharColor(charId)}">
@@ -468,6 +267,7 @@
                     </div>
                 </div>
 
+                <!-- 分支选项 -->
                 <div class="choices-container" v-if="currentStep && currentStep.type === 'choice' && uiVisible">
                     <div v-for="(choice, index) in availableChoices" :key="index"
                          class="choice-item" @click.stop="selectChoice(choice)">
@@ -475,8 +275,9 @@
                     </div>
                 </div>
 
-                <div class="dialogue-panel" 
-                     v-if="currentStep && currentStep.type === 'dialogue'" 
+                <!-- 对话面板 -->
+                <div class="dialogue-panel"
+                     v-if="currentStep && currentStep.type === 'dialogue'"
                      v-show="uiVisible"
                      @click.stop="advanceStory"
                      @contextmenu.stop>
@@ -496,13 +297,14 @@
                         </div>
                     </div>
 
-                    <div class="next-arrow" 
-                         v-if="typingFinished && currentStep?.type === 'dialogue' && uiVisible" 
+                    <div class="next-arrow"
+                         v-if="typingFinished && currentStep?.type === 'dialogue' && uiVisible"
                          @click.stop="advanceStory">
                         ↓
                     </div>
                 </div>
 
+                <!-- 历史记录侧面板 -->
                 <div class="side-panel-mask" v-if="showLog" @click="showLog = false"></div>
                 <div class="side-panel log-panel" :class="{ 'panel-open': showLog }">
                     <h3>历史剧情记录</h3>
@@ -514,23 +316,33 @@
                     </div>
                 </div>
 
+                <!-- 背包侧面板 -->
                 <div class="side-panel-mask" v-if="showInventory" @click="showInventory = false"></div>
                 <div class="side-panel inventory-panel" :class="{ 'panel-open': showInventory }">
                     <h3>随身背包物资</h3>
                     <div class="money-display">💰 拥有金币：<span>{{ gameState.money }}</span></div>
                     <h4>持有物品清单</h4>
                     <ul class="item-list">
-                        <li v-for="(item, i) in gameState.inventory" :key="i" 
+                        <li v-for="(item, i) in gameState.inventory" :key="i"
                             class="clickable-item"
                             :class="{ 'selected-item': selectedBagItemId === item }"
                             @click.stop="selectItemForInspection(item)">
-                            {{ queryItemIcon(item) }} {{ queryItemName(item) }}
+                            <span class="item-list-icon">
+                                <img v-if="queryItemImage(item)" :src="queryItemImage(item)"
+                                     class="item-list-img" @error="e => { e.target.style.display='none'; e.target.parentElement.innerText = queryItemIcon(item); }" />
+                                <span v-else>{{ queryItemIcon(item) }}</span>
+                            </span>
+                            {{ queryItemName(item) }}
                         </li>
                         <li v-if="gameState.inventory.length === 0" class="empty-hint">暂无物品</li>
                     </ul>
 
                     <div class="item-inspect-card" v-if="selectedBagItemId">
-                        <div class="item-inspect-icon">{{ queryItemIcon(selectedBagItemId) }}</div>
+                        <div class="item-inspect-icon">
+                            <img v-if="queryItemImage(selectedBagItemId)" :src="queryItemImage(selectedBagItemId)"
+                                 class="item-inspect-img" @error="e => { e.target.style.display='none'; e.target.parentElement.innerText = queryItemIcon(selectedBagItemId); }" />
+                            <span v-else>{{ queryItemIcon(selectedBagItemId) }}</span>
+                        </div>
                         <div class="item-inspect-detail">
                             <h5>{{ queryItemName(selectedBagItemId) }}</h5>
                             <p>{{ inspectedItemDynamicDescription }}</p>
@@ -538,22 +350,23 @@
                     </div>
                 </div>
 
+                <!-- 游戏内存档面板 -->
                 <div class="sub-panel" v-if="activeGamePanel === 'archiveSlots'" @click.stop>
                     <div class="panel-header">
                         <h2>{{ archiveMode === 'save' ? '保存核心进度节点（16格）' : '历史时空跳转节点（16格）' }}</h2>
                         <button class="close-btn" @click="activeGamePanel = null">关闭面板</button>
                     </div>
-                    
+
                     <div class="save-matrix-grid">
                         <div class="save-slot-card" v-for="slotId in 16" :key="slotId">
                             <div class="slot-header-bar" :class="{'has-data': saveSlotsData[slotId]}">
                                 <span>SLOT {{ String(slotId).padStart(2, '0') }}</span>
                                 <span>{{ saveSlotsData[slotId] ? 'DATA EXIST' : 'EMPTY' }}</span>
                             </div>
-                            
+
                             <div class="slot-thumbnail-pane">
-                                <div v-if="saveSlotsData[slotId]" :style="{background: saveSlotsData[slotId].bgRenderStyle, width:'100%', height:'100%', position:'relative'}">
-                                    <img v-if="saveSlotsData[slotId].sceneBgUrl" :src="saveSlotsData[slotId].sceneBgUrl" class="thumbnail-image-render" @error="e => e.target.style.display='none'">
+                                <div v-if="saveSlotsData[slotId]" :style="{background: saveSlotsData[slotId].bgRenderStyle || saveSlotsData[slotId].bgPlaceholder || '#111', width:'100%', height:'100%', position:'relative'}">
+                                    <img v-if="saveSlotsData[slotId].sceneBgUrl || saveSlotsData[slotId].sceneUrl" :src="saveSlotsData[slotId].sceneBgUrl || saveSlotsData[slotId].sceneUrl" class="thumbnail-image-render" @error="e => e.target.style.display='none'">
                                 </div>
                                 <div v-else class="thumbnail-empty-placeholder">
                                     <div class="tree-node-icon"></div>
@@ -576,6 +389,7 @@
                     </div>
                 </div>
 
+                <!-- 结局画面 -->
                 <div class="ending-screen" v-if="triggeredEnding">
                     <div class="ending-title">{{ triggeredEnding.title }}</div>
                     <div class="ending-desc">{{ triggeredEnding.description }}</div>
@@ -587,7 +401,7 @@
 
     </div>
 
-    <script src="js/effects.js"></script>
-    <script src="js/app.js"></script>
+    <!-- 应用入口（ES Module） -->
+    <script type="module" src="app/app.js"></script>
 </body>
 </html>
