@@ -17,6 +17,11 @@ import { analyzeTree, computeLayout, computeEndingLayout, computeEdgePath } from
 
 const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
+// ── 版本信息 ──
+const ENGINE_VERSION = '0.1.0';
+const EDITOR_VERSION = '0.1.0';
+const STORY_VERSION  = '1.0.0';
+
 // ════════════════════════════════════════════════════════════════════
 //  工具函数
 // ════════════════════════════════════════════════════════════════════
@@ -179,6 +184,11 @@ createApp({
 
         // 游戏设置弹窗
         const showGameSettings = ref(false);
+        const editableHomeConfig = reactive({
+            panelBgUrl: GameData.HOME_CONFIG?.panelBackground?.url || '',
+            panelOverlayColor: GameData.HOME_CONFIG?.panelBackground?.overlayColor || 'rgba(4,4,10,0.88)',
+            panelOverlayGradient: GameData.HOME_CONFIG?.panelBackground?.overlayGradient || '',
+        });
         const editableGameConfig = reactive({
             title: gameConfig.title || '',
             aspectWidth: gameConfig.aspectRatio?.width || 1280,
@@ -1355,6 +1365,10 @@ createApp({
             editableGameConfig.aspectWidth = gameConfig.aspectRatio?.width || 1280;
             editableGameConfig.aspectHeight = gameConfig.aspectRatio?.height || 720;
             editableGameConfig.textSpeed = gameConfig.textSpeed || 25;
+            const pb = GameData.HOME_CONFIG?.panelBackground || {};
+            editableHomeConfig.panelBgUrl = pb.url || '';
+            editableHomeConfig.panelOverlayColor = pb.overlayColor || 'rgba(4,4,10,0.88)';
+            editableHomeConfig.panelOverlayGradient = pb.overlayGradient || '';
             showGameSettings.value = true;
         }
 
@@ -1367,6 +1381,13 @@ createApp({
             };
             gameConfig.textSpeed = editableGameConfig.textSpeed;
             gameConfig.entryPoints = Object.keys(entryPoints);
+            // 保存面板背景配置到 HomeConfig
+            if (!GameData.HOME_CONFIG.panelBackground) {
+                GameData.HOME_CONFIG.panelBackground = {};
+            }
+            GameData.HOME_CONFIG.panelBackground.url = editableHomeConfig.panelBgUrl;
+            GameData.HOME_CONFIG.panelBackground.overlayColor = editableHomeConfig.panelOverlayColor;
+            GameData.HOME_CONFIG.panelBackground.overlayGradient = editableHomeConfig.panelOverlayGradient;
             showGameSettings.value = false;
             showToast('✅ 游戏设置已保存！请点击"同步到游戏"使引擎生效。');
         }
@@ -3277,7 +3298,7 @@ createApp({
             selectedChapterId, selectedEndingId, selectedEdge, editingStepIndex, hoveredNodeId,
             treePanel, viewScale, panX, panY, nodePositions,
             dragging, panning, selection, selectedNodeIds,
-            contextMenu, showGameSettings, editableGameConfig,
+            contextMenu, showGameSettings, editableGameConfig, editableHomeConfig,
             showResourceManager, resourceTab, selectedResourceId,
             resourceMeta, resourceList, selectedResource,
             editingGlobalSearch, globalSearchQuery, globalSearchInput,
@@ -3299,6 +3320,7 @@ createApp({
             selectedEndingPreview,
             selectedEndingNode, selectedEndingData, endingIncomingChapters,
             totalChapters, totalSteps, totalChoices,
+            ENGINE_VERSION, EDITOR_VERSION, STORY_VERSION,
             availableEffects,
             // 方法
             showToast, undo, redo, undoCount, redoCount, autoLayout, zoomIn, zoomOut, resetView,

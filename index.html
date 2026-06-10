@@ -102,19 +102,53 @@
             <div class="screen-mask-overlay" :class="homeEffectMaskClasses"></div>
             <div id="home-particles-container" class="effect-canvas-container"></div>
 
+            <button class="menu-info-btn" @click="openInfoPanel">ⓘ</button>
+
             <div class="menu-container">
                 <h1>{{ configTitle }}</h1>
                 <div class="menu-buttons">
                     <button v-if="hasExitSave" class="btn btn-continue" @click="continueFromExit">▶ 继续游戏</button>
                     <button class="btn" @click="openArchiveSlotsPanel('load')">从已有存档继续</button>
-                    <button class="btn" @click="startNewGame">新的旅程</button>
+                    <button class="btn" @click="confirmStartNewGame">新的旅程</button>
                     <button class="btn" @click="openCharactersPanel">角色名录</button>
                     <button class="btn" @click="activeMenuPanel = 'gallery'">画廊 CG 图鉴</button>
                 </div>
             </div>
 
+            <!-- 关于面板 -->
+            <div class="sub-panel" v-if="showInfoPanel" :style="panelBackgroundStyle">
+                <div class="panel-header">
+                    <h2>ℹ️ 关于</h2>
+                    <button class="close-btn" @click="closeInfoPanel">返回主视图</button>
+                </div>
+                <div class="about-container">
+                    <div class="about-section">
+                        <h3>{{ configTitle }}</h3>
+                        <p class="about-story-version">剧情版本 <strong>{{ STORY_VERSION }}</strong></p>
+                    </div>
+                    <div class="about-section">
+                        <h4>引擎内核</h4>
+                        <p>GalEngine v{{ ENGINE_VERSION }}</p>
+                        <p class="about-tech">自研视觉小说引擎 · 框架无关 · 事件驱动</p>
+                    </div>
+                    <div class="about-section">
+                        <h4>开发人员</h4>
+                        <p>jensentsts</p>
+                    </div>
+                    <div class="about-section">
+                        <h4>版权声明</h4>
+                        <p>© 2026 29103. All rights reserved.</p>
+                        <p class="about-legal">本作品采用 知识共享署名-非商业性使用-禁止演绎 4.0 国际许可协议。<br>未经许可，不得用于任何商业用途。</p>
+                    </div>
+                    <div class="about-section about-tech-stack">
+                        <h4>技术栈</h4>
+                        <p>Vue 3 · GalEngine · DOM Particles · localStorage</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- 角色名录面板 -->
-            <div class="archive-panel-fullscreen" v-if="activeMenuPanel === 'characters'">
+            <div class="archive-panel-fullscreen" v-if="activeMenuPanel === 'characters'" :style="panelBackgroundStyle">
                 <div class="archive-header-fluid">
                     <h2>角色名录详存</h2>
                     <button class="close-btn" @click="activeMenuPanel = null">返回主视图</button>
@@ -175,7 +209,7 @@
             </div>
 
             <!-- 画廊面板 -->
-            <div class="sub-panel" v-if="activeMenuPanel === 'gallery'">
+            <div class="sub-panel" v-if="activeMenuPanel === 'gallery'" :style="panelBackgroundStyle">
                 <div class="panel-header">
                     <h2>艺术画廊图鉴</h2>
                     <button class="close-btn" @click="activeMenuPanel = null">返回主视图</button>
@@ -254,7 +288,7 @@
             </div>
 
             <!-- 存档面板（菜单用） -->
-            <div class="sub-panel" v-if="activeMenuPanel === 'archiveSlots'">
+            <div class="sub-panel" v-if="activeMenuPanel === 'archiveSlots'" :style="panelBackgroundStyle">
                 <div class="panel-header">
                     <h2>历史时空跳转节点（16格）</h2>
                     <button class="close-btn" @click="activeMenuPanel = null">返回主菜单</button>
@@ -451,7 +485,7 @@
                 </div>
 
                 <!-- 游戏内存档面板 -->
-                <div class="sub-panel" v-if="activeGamePanel === 'archiveSlots'" @click.stop>
+                <div class="sub-panel" v-if="activeGamePanel === 'archiveSlots'" @click.stop :style="panelBackgroundStyle">
                     <div class="panel-header">
                         <h2>{{ archiveMode === 'save' ? '保存核心进度节点（16格）' : '历史时空跳转节点（16格）' }}</h2>
                         <button class="close-btn" @click="activeGamePanel = null">关闭面板</button>

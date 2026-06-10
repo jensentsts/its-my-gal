@@ -873,6 +873,25 @@
                         <label>默认打字速度 (ms/字)</label>
                         <input type="number" v-model.number="editableGameConfig.textSpeed" min="1" max="200" />
                     </div>
+                    <!-- 面板背景设置 -->
+                    <div class="section-label" style="margin-top:16px">🖼️ 面板背景（画廊/存档/角色名录）</div>
+                    <div class="settings-note">
+                        设置子面板的背景图片和叠加遮罩，体现主题风格。支持科幻/赛博风背景图。
+                    </div>
+                    <div class="form-row">
+                        <label>背景图片 URL</label>
+                        <input type="text" v-model="editableHomeConfig.panelBgUrl" placeholder="assets/scenes/panel_bg.png（留空使用纯色/渐变）" />
+                    </div>
+                    <div class="form-row form-row-2col">
+                        <div class="form-col">
+                            <label>叠加色（有图时）</label>
+                            <input type="text" v-model="editableHomeConfig.panelOverlayColor" placeholder="rgba(4,4,10,0.88)" />
+                        </div>
+                        <div class="form-col">
+                            <label>渐变底色（无图时）</label>
+                            <input type="text" v-model="editableHomeConfig.panelOverlayGradient" placeholder="linear-gradient(...)" />
+                        </div>
+                    </div>
                     <!-- 入口节点设置 -->
                     <div class="section-label" style="margin-top:16px">🚪 入口节点</div>
                     <div class="settings-note">

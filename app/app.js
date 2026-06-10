@@ -23,6 +23,10 @@ import { getDynamicItemDescription as getDynamicDesc, getItemIcon, getItemImage,
 
 const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
 
+// ── 版本信息 ──
+const ENGINE_VERSION = '0.1.0';
+const STORY_VERSION  = '1.0.0';
+
 createApp({
     setup() {
         // ================================================================
@@ -142,6 +146,23 @@ createApp({
             const hc = resolveData('HOME_CONFIG');
             if (hc?.backgroundUrl) return { backgroundImage: `url(${hc.backgroundUrl})` };
             return { background: hc?.placeholderGradient || '#0e0e14' };
+        });
+
+        const panelBackgroundStyle = computed(() => {
+            const hc = resolveData('HOME_CONFIG');
+            const pb = hc?.panelBackground;
+            if (!pb) return { background: 'rgba(4,4,10,0.98)' };
+            const bg = pb.url
+                ? { backgroundImage: `url(${pb.url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                : { background: pb.overlayGradient || 'rgba(4,4,10,0.98)' };
+            return {
+                ...bg,
+                // 用伪元素实现叠加遮罩无法通过 inline style 完成，直接用 background-blend
+                ...(pb.url && pb.overlayColor ? {
+                    backgroundImage: `linear-gradient(${pb.overlayColor}, ${pb.overlayColor}), url(${pb.url})`,
+                    backgroundBlendMode: 'normal',
+                } : {}),
+            };
         });
 
         const homeEffectMaskClasses = computed(() => {
@@ -302,6 +323,22 @@ createApp({
             engineCtx.initHomeEffects(resolveData('HOME_CONFIG'));
         }
 
+        function confirmStartNewGame() {
+            if (engineCtx.hasExitSave.value) {
+                engineCtx.showDialog({
+                    type: 'confirm',
+                    title: '开始新旅程',
+                    message: '当前存在退出暂存，开始新游戏将覆盖该进度。\n确定要继续吗？',
+                    confirmText: '确定开始',
+                    cancelText: '取消',
+                }).then(result => {
+                    if (result === true) startNewGame();
+                });
+            } else {
+                startNewGame();
+            }
+        }
+
         function continueFromExit() {
             const ok = engineCtx.loadExitState();
             if (ok) {
@@ -359,6 +396,11 @@ createApp({
             const firstId = Object.keys(resolveData('CHARACTERS'))[0] || null;
             switchInspectedCharacter(firstId);
         }
+
+        // ── 关于面板 ──
+        const showInfoPanel = ref(false);
+        function openInfoPanel() { showInfoPanel.value = true; }
+        function closeInfoPanel() { showInfoPanel.value = false; }
 
         function switchInspectedCharacter(charId) {
             engineCtx.activeInspectedCharId.value = charId;
@@ -607,7 +649,7 @@ createApp({
             // 计算属性
             currentStep, currentSpeakerId, currentSpeakerName, currentSpeakerColor,
             currentAvatarUrl, shouldShowAvatar, availableChoices,
-            viewportStyle, backgroundStyle, homeBackgroundStyle,
+            viewportStyle, backgroundStyle, homeBackgroundStyle, panelBackgroundStyle,
             homeEffectMaskClasses, effectMaskClasses,
             inspectedChar, activeInspectedSpriteLabel, getArchiveEmoji,
             inspectedItemDynamicDescription,
@@ -619,7 +661,9 @@ createApp({
             fullEndingsList: computed(() => resolveData('ENDINGS')),
             chapterDescriptions: computed(() => resolveData('CHAPTER_DESCRIPTIONS')),
             // 方法（保持与原模板同名）
-            startNewGame, continueFromExit, advanceStory, selectChoice, rollbackToTimeline,
+            ENGINE_VERSION, STORY_VERSION,
+            showInfoPanel, closeInfoPanel, openInfoPanel,
+            startNewGame, confirmStartNewGame, continueFromExit, advanceStory, selectChoice, rollbackToTimeline,
             exitToMenu, safelyExitToMenu, openCharactersPanel, switchInspectedCharacter,
             switchInspectedSprite, handleArchiveSpriteError,
             openArchiveSlotsPanel, executeSlotSave, executeSlotLoad, executeSlotClear,
