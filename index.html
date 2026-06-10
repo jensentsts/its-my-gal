@@ -413,7 +413,10 @@
                 <!-- 分支选项 -->
                 <div class="choices-container" v-if="currentStep && currentStep.type === 'choice' && uiVisible">
                     <div v-for="(choice, index) in availableChoices" :key="index"
-                         class="choice-item" @click.stop="selectChoice(choice)">
+                         class="choice-item"
+                         :class="{ 'choice-highlighted': index === highlightedChoiceIndex }"
+                         @click.stop="selectChoice(choice)"
+                         @mouseenter="highlightedChoiceIndex = index">
                         {{ choice.text }}
                     </div>
                 </div>

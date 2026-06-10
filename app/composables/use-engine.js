@@ -560,6 +560,13 @@ export function useEngine() {
         sceneBgFailed.value = false;
         clearExitSave();
 
+        const gd = gameData.value;
+        const chapters = gd?.STORY_CHAPTERS || {};
+        if (Object.keys(chapters).length === 0) {
+            console.warn('[useEngine] 未加载到任何剧情章节，跳过开始游戏');
+            return;
+        }
+
         const entryChapterId = getEntryChapterId();
         engine.value?.start(entryChapterId, 0);
         syncState();

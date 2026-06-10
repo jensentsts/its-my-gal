@@ -220,6 +220,7 @@
     line-height: 1.5;
 }
 
+.choice-item.choice-highlighted,
 .choice-item:hover {
     background: rgba(255,107,129,0.2);
     border-color: rgba(255,107,129,0.6);

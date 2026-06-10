@@ -1955,3 +1955,38 @@ img {
     margin-top: 4px;
     opacity: 0.85;
 }
+
+/* 批处理文本编辑器 */
+.batch-text-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+.batch-text-item {
+    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    border-radius: 6px;
+    padding: 8px;
+    background: rgba(255,255,255,0.02);
+}
+.batch-text-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+.batch-text-index {
+    font-size: 11px;
+    color: var(--text-secondary, rgba(255,255,255,0.4));
+    letter-spacing: 0.5px;
+}
+.batch-text-item textarea {
+    width: 100%;
+    min-height: 60px;
+    resize: vertical;
+}
+.batch-text-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}

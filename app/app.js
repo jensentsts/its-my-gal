@@ -21,7 +21,7 @@ import { useScale }  from './composables/use-scale.js';
 import { useToast }  from './composables/use-toast.js';
 import { getDynamicItemDescription as getDynamicDesc, getItemIcon, getItemImage, getItemName } from '../engine/index.js';
 
-const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
+const { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
 // ── 版本信息 ──
 const ENGINE_VERSION = '0.1.1';
@@ -119,6 +119,10 @@ createApp({
         const availableChoices = computed(() =>
             currentStep.value ? (currentStep.value.choices || []) : []
         );
+
+        const highlightedChoiceIndex = ref(0);
+        // 步骤/选项变化时重置高亮
+        watch([currentStep, availableChoices], () => { highlightedChoiceIndex.value = 0; });
 
         const viewportStyle = computed(() => {
             const cfg = resolveData('GAME_CONFIG');
@@ -324,6 +328,17 @@ createApp({
         }
 
         function confirmStartNewGame() {
+            // 检查是否存在剧情数据
+            const chapters = resolveData('STORY_CHAPTERS');
+            if (!chapters || Object.keys(chapters).length === 0) {
+                engineCtx.showDialog({
+                    type: 'alert',
+                    title: '无法开始游戏',
+                    message: '当前资源包中不存在任何剧情章节。\n请先通过编辑器创建剧情，或加载有效的资源包。',
+                    confirmText: '确定',
+                });
+                return;
+            }
             if (engineCtx.hasExitSave.value) {
                 engineCtx.showDialog({
                     type: 'confirm',
@@ -557,6 +572,26 @@ createApp({
                 return;
             }
 
+            // 方向键/Enter → 分支选项导航
+            const choices = availableChoices.value;
+            if (choices.length > 0 && inGame) {
+                if (key === 'ArrowUp') {
+                    e.preventDefault();
+                    highlightedChoiceIndex.value = (highlightedChoiceIndex.value - 1 + choices.length) % choices.length;
+                    return;
+                }
+                if (key === 'ArrowDown') {
+                    e.preventDefault();
+                    highlightedChoiceIndex.value = (highlightedChoiceIndex.value + 1) % choices.length;
+                    return;
+                }
+                if (key === 'Enter') {
+                    e.preventDefault();
+                    selectChoice(choices[highlightedChoiceIndex.value]);
+                    return;
+                }
+            }
+
             // Space（非输入区域）→ 关闭物品提示 / 推进剧情（长按节流50ms）
             if (key === ' ' && inGame) {
                 e.preventDefault();
@@ -664,6 +699,7 @@ createApp({
             // 计算属性
             currentStep, currentSpeakerId, currentSpeakerName, currentSpeakerColor,
             currentAvatarUrl, shouldShowAvatar, availableChoices,
+            highlightedChoiceIndex,
             viewportStyle, backgroundStyle, homeBackgroundStyle, panelBackgroundStyle,
             homeEffectMaskClasses, effectMaskClasses,
             inspectedChar, activeInspectedSpriteLabel, getArchiveEmoji,

@@ -917,6 +917,10 @@ createApp({
         // 存储事件监听器引用以便正确清理
         const _preventContextMenu = e => e.preventDefault();
         onMounted(() => {
+            // 检查剧情数据是否为空
+            if (Object.keys(chapters).length === 0) {
+                showToast('⚠️ 当前资源包中无任何剧情章节，请在画布上右键创建新章节');
+            }
             autoLayout();
             // 结局节点已由 autoLayout 在章节树下方自动摆放
             window.addEventListener('mouseup', onCanvasMouseUp);
@@ -2654,6 +2658,31 @@ createApp({
             }
         }
 
+        // ── 文本批处理 ──────────────────────────────────────────────
+        function addBatchTextSegment() {
+            const step = editingStep.value;
+            if (!step) return;
+            if (!step.texts) {
+                step.texts = [step.text || ''];
+            }
+            step.texts.push('新段落...');
+        }
+
+        function removeBatchTextSegment(index) {
+            const step = editingStep.value;
+            if (!step || !step.texts) return;
+            if (step.texts.length <= 1) return;
+            step.texts.splice(index, 1);
+            step.text = step.texts[0];
+        }
+
+        function disableBatchText() {
+            const step = editingStep.value;
+            if (!step || !step.texts) return;
+            step.text = step.texts[0] || '';
+            delete step.texts;
+        }
+
         // ── 辅助 ──────────────────────────────────────────────────────
         function getCharName(charId) {
             return gameCharacters[charId]?.name || charId;
@@ -3333,6 +3362,7 @@ createApp({
             addChoice, removeChoice,
             onCGChange, initCGForm, addCharChange, removeCharChange, onCharChangeField, syncCharChangesToStep,
             toggleEffect,
+            addBatchTextSegment, removeBatchTextSegment, disableBatchText,
             getCharName, getCharSprites, stepTextBrief, stepTypeLabel,
             exportAll, exportJSON, formatJS, copyExport, downloadExport, resetAll,
             exportPackZip, triggerImportPack, handlePackImport,

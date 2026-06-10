@@ -308,7 +308,8 @@
                 <!-- 空状态 -->
                 <div class="tree-empty" v-if="treeNodes.length === 0">
                     <div class="empty-icon">📂</div>
-                    <div>暂无章节数据</div>
+                    <div>当前资源包中无任何剧情章节</div>
+                    <div class="empty-hint">在画布上单击右键，选择「创建章节」开始编辑</div>
                     <button class="tb-btn" @click="addChapter">创建第一个章节</button>
                 </div>
 
@@ -489,10 +490,30 @@
                             </div>
                             <div class="form-row">
                                 <label>对话文本</label>
-                                <textarea v-model="editingStep.text" rows="4" placeholder="输入对话或叙述文本..."></textarea>
-                                <div class="step-texts-info" v-if="editingStep.texts && editingStep.texts.length > 1">
-                                    📚 {{ editingStep.texts.length }}段批处理文本（引擎将作为连续流处理，减少步骤开销）
-                                </div>
+                                <!-- 单段模式 -->
+                                <template v-if="!editingStep.texts">
+                                    <textarea v-model="editingStep.text" rows="4" placeholder="输入对话或叙述文本..."></textarea>
+                                    <button class="tb-btn tb-sm" @click="addBatchTextSegment" style="margin-top:6px;">📚 批处理 — 多段文本</button>
+                                </template>
+                                <!-- 批处理模式 -->
+                                <template v-else>
+                                    <div class="batch-text-list">
+                                        <div v-for="(t, ti) in editingStep.texts" :key="ti" class="batch-text-item">
+                                            <div class="batch-text-item-header">
+                                                <span class="batch-text-index">第{{ ti + 1 }}段</span>
+                                                <button v-if="editingStep.texts.length > 1" class="step-btn step-btn-del" @click="removeBatchTextSegment(ti)" title="删除此段">✕</button>
+                                            </div>
+                                            <textarea v-model="editingStep.texts[ti]" rows="3" :placeholder="'输入第' + (ti+1) + '段文本...'"></textarea>
+                                        </div>
+                                        <div class="batch-text-actions">
+                                            <button class="tb-btn tb-sm" @click="addBatchTextSegment">➕ 添加文本段</button>
+                                            <button class="tb-btn tb-sm" @click="disableBatchText">⬅ 合并为单段</button>
+                                        </div>
+                                    </div>
+                                    <div class="step-texts-info">
+                                        📚 {{ editingStep.texts.length }}段批处理文本（引擎将作为连续流处理，减少步骤开销）
+                                    </div>
+                                </template>
                             </div>
                             <div class="form-row">
                                 <label>屏幕特效</label>

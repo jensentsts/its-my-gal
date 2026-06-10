@@ -420,6 +420,32 @@ export function useEditorActions(s, c, deps) {
         }
     }
 
+    // ── 文本批处理 ─────────────────────────────────────────────
+    function addBatchTextSegment() {
+        const step = c.editingStep.value;
+        if (!step) return;
+        if (!step.texts) {
+            step.texts = [step.text || ''];
+        }
+        step.texts.push('新段落...');
+    }
+
+    function removeBatchTextSegment(index) {
+        const step = c.editingStep.value;
+        if (!step || !step.texts) return;
+        if (step.texts.length <= 1) return;
+        step.texts.splice(index, 1);
+        // 同步第一段到 step.text（兼容旧消费方，引擎实际以 texts 为准）
+        step.text = step.texts[0];
+    }
+
+    function disableBatchText() {
+        const step = c.editingStep.value;
+        if (!step || !step.texts) return;
+        step.text = step.texts[0] || '';
+        delete step.texts;
+    }
+
     // ── 游戏设置 ──────────────────────────────────────────────
     function openGameSettings() {
         s.editableGameConfig.title = s.gameConfig.title || '';
@@ -1492,6 +1518,7 @@ export function useEditorActions(s, c, deps) {
         addChoice, removeChoice,
         onCGChange, addCharChange, removeCharChange, onCharChangeField, syncCharChangesToStep,
         toggleEffect,
+        addBatchTextSegment, removeBatchTextSegment, disableBatchText,
         openGameSettings, saveGameSettings, syncToGame, previewStory,
         openResourceManager, selectResource, addResource, deleteResource,
         addSprite, addAvatar, renameResource, updateReferences,
