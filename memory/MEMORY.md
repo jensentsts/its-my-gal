@@ -1,0 +1,2 @@
+- [Story Prediction & Preloading](story-prediction-preloading.md) — 剧情分支预判与章节预加载优化系统
+- [Dialogue Stutter & Save Fixes](dialogue-saving-stutter-fixes.md) — 对话卡顿和存档故障修复记录

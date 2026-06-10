@@ -85,7 +85,10 @@ export const chapter_forest_explore = [
     ],
     "effects": [
       "vignette"
-    ],
+    ]
+  },
+  {
+    "type": "jump",
     "jumpChapter": "ruins_exploration"
   }
 ];

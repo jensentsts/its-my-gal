@@ -14,7 +14,10 @@
 import { GalEngine, EffectsManager, ResourceManager,
          getDynamicItemDescription as getDynamicDesc,
          getItemIcon as getIcon, getItemImage as getImage, getItemName as getName,
-         DEFAULT_ITEM_ANIMATION_PRESETS } from '../../engine/index.js';
+         DEFAULT_ITEM_ANIMATION_PRESETS,
+         ChapterLoader,
+         extractBranchPoints,
+         rankNextChapters } from '../../engine/index.js';
 export function useEngine() {
     // ---- 引擎实例 ----
     const engine = Vue.ref(null);
@@ -28,6 +31,21 @@ export function useEngine() {
 
     // ---- 资源包管理器 ----
     const resourceManager = new ResourceManager();
+
+    // ---- 章节智能预加载器 ----
+    const chapterLoader = new ChapterLoader({
+        onProgress: (chapterId, status) => {
+            if (status === 'ready') {
+                console.log(`[Preloader] ✅ 章节预加载完成: ${chapterId}`);
+            } else if (status === 'loading') {
+                console.log(`[Preloader] ⏳ 章节预加载中: ${chapterId}`);
+            } else if (status === 'error') {
+                console.warn(`[Preloader] ⚠ 章节预加载失败: ${chapterId}`);
+            }
+        }
+    });
+    // 预加载激活标记（用于尾部追踪）
+    let _lastTrackedChapterId = null;
 
     // ---- 当前游戏数据引用（供外部 computed 使用） ----
     const gameData = Vue.ref(null);
@@ -97,6 +115,15 @@ export function useEngine() {
         _items = gameDataInput.ITEMS || {};
         _itemAnimPresets = gameDataInput.ITEM_ANIMATION_PRESETS || DEFAULT_ITEM_ANIMATION_PRESETS;
         gameData.value = gameDataInput;
+
+        // 初始化 ChapterLoader：同步注入所有已加载章节
+        chapterLoader.initSync(gameDataInput.STORY_CHAPTERS);
+
+        // 如果是资源包懒加载模式，设置异步加载器
+        if (resourceManager.isLoaded() && !resourceManager.hasChapter('main')) {
+            // 资源包未预加载所有章节 → 注册异步加载函数
+            chapterLoader.setLoadFn((chapterId) => resourceManager.loadChapter(chapterId));
+        }
 
         engine.value = new GalEngine({
             chapters:   gameDataInput.STORY_CHAPTERS,
@@ -317,10 +344,89 @@ export function useEngine() {
         eng.on('choice:present', () => {
             typingFinished.value = true;
         });
+
+        // ---- 章节变更 → 预判 + 预加载 ----
+        eng.on('chapter:change', ({ from, to }) => {
+            _preloadOnChapterChange(to);
+        });
     }
 
-    // ---- 状态同步 ----
+    // ====================================================================
+    //  章节预判与预加载（核心优化）
+    // ====================================================================
+
+    /**
+     * 当章节发生变更时触发 —— 分析当前章节的分支，预加载可能的前往章节
+     * @param {string} chapterId - 新进入的章节 ID
+     */
+    function _preloadOnChapterChange(chapterId) {
+        // 避免同一章节重复触发
+        if (_lastTrackedChapterId === chapterId) return;
+        _lastTrackedChapterId = chapterId;
+
+        // 从缓存获取章节步骤
+        const steps = chapterLoader.getChapter(chapterId);
+        if (!Array.isArray(steps)) {
+            // 章节尚未加载 → 先确保加载，再预判
+            if (!chapterLoader.isLoading(chapterId)) {
+                chapterLoader.ensure(chapterId).then(loadedSteps => {
+                    _doPreload(chapterId, loadedSteps);
+                }).catch(() => {
+                    // 静默失败
+                });
+            }
+            return;
+        }
+
+        _doPreload(chapterId, steps);
+    }
+
+    /**
+     * 执行实际预判和预加载
+     * @param {string} chapterId
+     * @param {Array} steps
+     */
+    function _doPreload(chapterId, steps) {
+        const flags = engine.value?.state?.gameState?.flags || {};
+
+        // 1. 提取分支点
+        const branchPoints = extractBranchPoints(steps, flags);
+
+        // 2. 加权排序
+        const ranked = rankNextChapters(branchPoints, flags);
+
+        if (ranked.length === 0) return;
+
+        // 3. 触发预加载（全部可能的下一跳，按权重排序，高优先级在前）
+        const targets = ranked.map(r => r.chapterId);
+
+        // 去重
+        const uniqueTargets = [...new Set(targets)];
+
+        // 记录预加载
+        if (uniqueTargets.length > 0) {
+            console.log(`[Preloader] 🔮 章节 "${chapterId}" 分支预判:`, uniqueTargets);
+        }
+
+        // 对于高权重（必达）章节，立即触发 ensure
+        const highPriority = ranked.filter(r => r.weight >= 3).map(r => r.chapterId);
+        for (const hc of highPriority) {
+            if (!chapterLoader.has(hc)) {
+                chapterLoader.ensure(hc).catch(() => {});
+            }
+        }
+
+        // 其余放入后台预加载队列
+        chapterLoader.preload(uniqueTargets);
+    }
+
+    // ---- 状态同步（带去重守卫） ----
+    let _syncGuard = false;
     function syncState() {
+        if (_syncGuard) return; // 防止同一帧内重复同步
+        _syncGuard = true;
+        queueMicrotask(() => { _syncGuard = false; }); // 下一微任务释放
+
         const s = engine.value?.state;
         if (!s) return;
 
@@ -411,6 +517,10 @@ export function useEngine() {
         activeGamePanel.value = null;
         uiVisible.value = true;
 
+        // 触发入口章节的预判预加载
+        _lastTrackedChapterId = null;
+        _preloadOnChapterChange(entryChapterId);
+
         Vue.nextTick(() => {
             initGameEffects();
             updateSceneBgTest();
@@ -472,6 +582,10 @@ export function useEngine() {
             activeGamePanel.value = null;
             activeMenuPanel.value = null;
             uiVisible.value = true;
+
+            // 读档后重新触发预判预加载
+            _lastTrackedChapterId = null;
+            _preloadOnChapterChange(currentChapterId.value);
 
             Vue.nextTick(() => {
                 initGameEffects();
@@ -560,11 +674,20 @@ export function useEngine() {
         engine.value = null;
     }
 
+    // ---- 预加载统计（供调试/UI 展示） ----
+    const preloadStats = Vue.computed(() => ({
+        ...chapterLoader.stats,
+        pending: chapterLoader.getPendingChapters(),
+        loaded: chapterLoader.getLoadedChapters().length,
+    }));
+
     return {
         // 实例
         engine,
         resourceManager,
+        chapterLoader,
         gameData,
+        preloadStats,
         // 响应式状态
         currentView, activeMenuPanel, activeGamePanel, archiveMode, saveSlotsData, uiVisible,
         unlockedGalleries, unlockedEndings,

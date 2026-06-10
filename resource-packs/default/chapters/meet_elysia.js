@@ -120,7 +120,10 @@ export const chapter_meet_elysia = [
     "characterId": "elysia",
     "text": "她从腰间解下一把匕首，反手递给我。'这是你祖父当年托我保管的祭祀匕首，如今物归原主。剑身上的术式虽然沉睡已久，但若有危机，它自会觉醒。'匕首的剑柄冰凉而沉重，剑身上刻着繁复的纹路，在接触我掌心的瞬间微微发出一丝暖意。",
     "gainItem": "dagger",
-    "gainApproach": "receive",
+    "gainApproach": "receive"
+  },
+  {
+    "type": "jump",
     "jumpChapter": "forest_explore"
   }
 ];

@@ -59,7 +59,10 @@ export const chapter_main = [
     "type": "dialogue",
     "characterId": "player",
     "text": "第二天一早，我给王明发了条消息：'我出趟远门，可能要好几天。别担心。'然后背上包，搭上了去旧城北郊的公交车。窗外的城市风景一点一点褪去，高楼大厦变成了矮旧平房，柏油路变成了土路，最后连路都没有了——只剩一片密不透风的老树林。",
-    "effects": [],
+    "effects": []
+  },
+  {
+    "type": "jump",
     "jumpChapter": "meet_elysia"
   }
 ];

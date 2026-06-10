@@ -88,7 +88,10 @@ export const chapter_possession_event = [
     "type": "dialogue",
     "characterId": "player",
     "text": "而更深处——在那黑暗之下——我隐约感知到了一个安静的、温柔的、仿佛沉睡了一般的意识。那是爱莉希雅。她的灵魂被瓦尔加斯压制了，但并没有消失。她还在这里。这个发现让我心中涌起一股强烈的决心。",
-    "effects": [],
+    "effects": []
+  },
+  {
+    "type": "jump",
     "jumpChapter": "body_explore"
   }
 ];

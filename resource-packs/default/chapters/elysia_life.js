@@ -111,7 +111,10 @@ export const chapter_elysia_life = [
     "effects": [
       "vignette"
     ],
-    "screenEffect": "corruption?density=15",
+    "screenEffect": "corruption?density=15"
+  },
+  {
+    "type": "jump",
     "jumpChapter": "final_choice"
   }
 ];

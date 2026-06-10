@@ -92,6 +92,7 @@ export class GalEngine extends EventEmitter {
             currentStepIndex: stepIndex,
             gameState: { money: 100, inventory: ['log', 'amulet'], flags: {} }
         });
+        this.emit('chapter:change', { from: null, to: chapterId, stepIndex });
         this.emit('game:start', { chapterId, stepIndex });
         this._executeStep();
     }
@@ -149,8 +150,10 @@ export class GalEngine extends EventEmitter {
                 return 'ending';
             }
             this.state.truncateHistoryLogs(this.state.historyLogs.length - 1);
+            const fromChapter = this.state.currentChapterId;
             this.state.setChapter(step.jumpChapter, 0);
             this.state.setLastSpeaker(null);
+            this.emit('chapter:change', { from: fromChapter, to: step.jumpChapter, stepIndex: 0 });
         } else {
             this.state.advanceStep();
         }
@@ -191,8 +194,10 @@ export class GalEngine extends EventEmitter {
                 this.emit('choice:selected', choice);
                 return;
             }
+            const fromCh = this.state.currentChapterId;
             this.state.setChapter(choice.jumpChapter, 0);
             this.state.setLastSpeaker(null);
+            this.emit('chapter:change', { from: fromCh, to: choice.jumpChapter, stepIndex: 0 });
         } else {
             this.state.advanceStep();
         }
@@ -274,8 +279,10 @@ export class GalEngine extends EventEmitter {
                 this.emit('step:jump', { from: this.state.currentChapterId, to: step.jumpChapter });
                 if (step.jumpChapter) {
                     this.state.truncateHistoryLogs(this.state.historyLogs.length - 1);
+                    const fromCh = this.state.currentChapterId;
                     this.state.setChapter(step.jumpChapter, 0);
                     this.state.setLastSpeaker(null);
+                    this.emit('chapter:change', { from: fromCh, to: step.jumpChapter, stepIndex: 0 });
                 } else {
                     this.state.advanceStep();
                 }
@@ -312,6 +319,16 @@ export class GalEngine extends EventEmitter {
             );
             if (!isExist) {
                 this.state.pushHistoryLog(logMeta);
+                // 内存优化：仅保留最近 30 条历史记录的完整 snap（用于回滚）
+                // 更旧的日志保留文本和元数据（供 timeline 展示），但释放其 snap
+                if (this.state.historyLogs.length > 30) {
+                    const stale = this.state.historyLogs.length - 30;
+                    for (let i = 0; i < stale; i++) {
+                        if (this.state.historyLogs[i].snap) {
+                            this.state.historyLogs[i] = { ...this.state.historyLogs[i], snap: undefined };
+                        }
+                    }
+                }
                 this.emit('history:push', logMeta);
             }
         }
@@ -334,7 +351,17 @@ export class GalEngine extends EventEmitter {
         this.emit('typewriter:start', { text, speed });
 
         let index = 0;
-        this._typingTimer = setInterval(() => {
+        let lastTickTime = performance.now();
+        const minInterval = Math.max(speed, 16); // 不低于 16ms (~60fps)
+
+        const tick = (now) => {
+            const elapsed = now - lastTickTime;
+            if (elapsed < minInterval) {
+                this._typingTimer = requestAnimationFrame(tick);
+                return;
+            }
+            lastTickTime = now;
+
             if (index < text.length) {
                 const currentText = text.substring(0, index + 1);
                 this.state.setTypedText(currentText);
@@ -343,6 +370,7 @@ export class GalEngine extends EventEmitter {
                 if (this._hooks.onTypewriterTick) {
                     this._hooks.onTypewriterTick(text[index - 1], index - 1);
                 }
+                this._typingTimer = requestAnimationFrame(tick);
             } else {
                 this._finishTyping();
                 // 自动推进
@@ -351,7 +379,9 @@ export class GalEngine extends EventEmitter {
                     this._autoAdvanceTimer = setTimeout(() => this.advance(), delay);
                 }
             }
-        }, speed);
+        };
+
+        this._typingTimer = requestAnimationFrame(tick);
     }
 
     _finishTyping() {
@@ -381,6 +411,7 @@ export class GalEngine extends EventEmitter {
         this.state.restore(targetLog.snap);
         this.state.setChapter(targetLog.chapterId, targetLog.stepIndex);
 
+        this.emit('chapter:change', { from: this.state.currentChapterId, to: targetLog.chapterId, stepIndex: targetLog.stepIndex });
         this.emit('rollback', { logIndex, targetLog });
         this._executeStep();
         return true;
@@ -394,6 +425,18 @@ export class GalEngine extends EventEmitter {
         const snap = this.state.snapshot();
         const sceneCfg = this.scenes[this.currentStep?.sceneId];
 
+        // 关键修复：剥离 historyLogs 中嵌套的 snap 字段，防止递归膨胀撑爆 localStorage
+        if (snap.historyLogs) {
+            snap.historyLogs = snap.historyLogs.map(log => {
+                const { snap: _snap, ...rest } = log;
+                return rest;
+            });
+            // 仅保留最近 50 条日志，控制存档体积
+            if (snap.historyLogs.length > 50) {
+                snap.historyLogs = snap.historyLogs.slice(-50);
+            }
+        }
+
         const slotData = {
             ...snap,
             ...meta,
@@ -401,7 +444,13 @@ export class GalEngine extends EventEmitter {
             sceneUrl: sceneCfg?.url || null,
         };
 
-        return this.saveManager.save(slotId, slotData);
+        try {
+            return this.saveManager.save(slotId, slotData);
+        } catch (e) {
+            console.error('[GalEngine] 存档失败:', e.message);
+            this.emit('save:error', { slotId, error: e.message });
+            return false;
+        }
     }
 
     load(slotId) {
@@ -409,7 +458,9 @@ export class GalEngine extends EventEmitter {
         if (!data) return false;
 
         this._clearTimers();
+        const prevChapter = this.state.currentChapterId;
         this.state.restore(data);
+        this.emit('chapter:change', { from: prevChapter, to: this.state.currentChapterId, stepIndex: this.state.currentStepIndex });
         this.emit('game:load', data);
         this._executeStep();
         return true;
@@ -533,7 +584,13 @@ export class GalEngine extends EventEmitter {
     }
 
     _clearTypingTimer() {
-        clearInterval(this._typingTimer);
+        if (this._typingTimer) {
+            if (typeof this._typingTimer === 'number') {
+                cancelAnimationFrame(this._typingTimer);
+            } else {
+                clearInterval(this._typingTimer);
+            }
+        }
         this._typingTimer = null;
     }
 

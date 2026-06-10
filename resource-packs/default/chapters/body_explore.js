@@ -125,7 +125,10 @@ export const chapter_body_explore = [
     "type": "dialogue",
     "characterId": "player",
     "text": "我重新站直了身体——用这具轻盈的、柔软的、陌生而又美丽的精灵之躯。我花了一段不短的时间来重新学习如何站立、如何呼吸、如何在这个全新的身体里存在。护身符在我脖子上仍然散发着微弱的暖意，提醒着我还是'安文'——至少在意识上。但此刻我的身体是爱莉希雅的，而我必须扮演好这个角色。",
-    "effects": [],
+    "effects": []
+  },
+  {
+    "type": "jump",
     "jumpChapter": "elysia_life"
   }
 ];

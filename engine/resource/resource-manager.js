@@ -65,9 +65,12 @@ export class ResourceManager {
      * 从目录路径加载资源包（通过 HTTP fetch）
      * @param {string} packPath - 资源包根目录路径（相对于 HTML 页面的路径）
      *   例如: 'resource-packs/default' 或 './resource-packs/default'
+     * @param {Function} [onProgress] - 进度回调
+     * @param {Object} [options] - 加载选项
+     * @param {boolean} [options.lazyChapters=false] - 是否延迟加载章节（按需加载而非全部提前加载）
      * @returns {Promise<Object>} 引擎可用的完整数据对象
      */
-    async loadPack(packPath, onProgress) {
+    async loadPack(packPath, onProgress, options = {}) {
         this._reset();
         this._basePath = packPath.replace(/\/+$/, '');
 
@@ -133,33 +136,60 @@ export class ResourceManager {
         });
         await Promise.all(configPromises);
 
-        report(30, 'chapters', '正在加载故事章节...');
-
-        // 3. 并行加载所有章节文件
+        // ---- 章节加载策略 ----
         const chapters = {};
-        const chapterEntries = manifest.chapters && Object.keys(manifest.chapters).length > 0
-            ? Object.entries(manifest.chapters)
-            : [];
-        const totalChapters = chapterEntries.length || 13; // fallback estimate
 
-        if (chapterEntries.length > 0) {
-            let chaptersLoaded = 0;
-            const chapterPromises = chapterEntries.map(async ([chId, filePath]) => {
-                try {
-                    chapters[chId] = await this._fetchJSON(`${this._basePath}/${filePath}`);
-                } catch (e) {
-                    console.error(`[ResourceManager] 章节 "${chId}" 加载失败: ${e.message}`);
-                    chapters[chId] = [];
+        if (options.lazyChapters) {
+            // 懒加载模式：只加载入口章节（main），其余按需+预判加载
+            report(30, 'chapters', '使用智能懒加载模式...');
+
+            // 确定入口章节
+            const entryIds = manifest.entryPoints || ['main'];
+            let entriesLoaded = 0;
+            for (const entryId of entryIds) {
+                const filePath = manifest.chapters?.[entryId];
+                if (filePath) {
+                    try {
+                        chapters[entryId] = await this._fetchJSON(`${this._basePath}/${filePath}`);
+                        entriesLoaded++;
+                        report(30, 'chapters', `入口章节加载: ${entryId}`);
+                    } catch (e) {
+                        console.warn(`[ResourceManager] 入口章节 "${entryId}" 加载失败: ${e.message}`);
+                        chapters[entryId] = [];
+                    }
                 }
-                chaptersLoaded++;
-                report(30 + Math.round((chaptersLoaded / totalChapters) * 50), 'chapters', `章节加载中: ${chId} (${chaptersLoaded}/${totalChapters})`);
-            });
-            await Promise.all(chapterPromises);
+            }
+
+            // 跳过后面的全量加载
+            report(50, 'chapters', `入口章节就绪 (${entriesLoaded} 个)，其余将按需预加载`);
         } else {
-            console.warn('[ResourceManager] 清单中无章节映射，尝试自动扫描...');
-            await this._autoScanChapters(chapters, (loaded, total, chId) => {
-                report(30 + Math.round((loaded / Math.max(total, 1)) * 50), 'chapters', `自动扫描: ${chId || ''} (${loaded}/${total})`);
-            });
+            // 全量加载模式（原有行为）
+            report(30, 'chapters', '正在加载故事章节...');
+
+            const chapterEntries = manifest.chapters && Object.keys(manifest.chapters).length > 0
+                ? Object.entries(manifest.chapters)
+                : [];
+            const totalChapters = chapterEntries.length || 13;
+
+            if (chapterEntries.length > 0) {
+                let chaptersLoaded = 0;
+                const chapterPromises = chapterEntries.map(async ([chId, filePath]) => {
+                    try {
+                        chapters[chId] = await this._fetchJSON(`${this._basePath}/${filePath}`);
+                    } catch (e) {
+                        console.error(`[ResourceManager] 章节 "${chId}" 加载失败: ${e.message}`);
+                        chapters[chId] = [];
+                    }
+                    chaptersLoaded++;
+                    report(30 + Math.round((chaptersLoaded / totalChapters) * 50), 'chapters', `章节加载中: ${chId} (${chaptersLoaded}/${totalChapters})`);
+                });
+                await Promise.all(chapterPromises);
+            } else {
+                console.warn('[ResourceManager] 清单中无章节映射，尝试自动扫描...');
+                await this._autoScanChapters(chapters, (loaded, total, chId) => {
+                    report(30 + Math.round((loaded / Math.max(total, 1)) * 50), 'chapters', `自动扫描: ${chId || ''} (${loaded}/${total})`);
+                });
+            }
         }
 
         report(80, 'build', '正在组装资源数据...');
@@ -324,6 +354,71 @@ export class ResourceManager {
      */
     getPackName() {
         return this._packName;
+    }
+
+    /**
+     * 检查某章节是否已加载到 _packData 中
+     * @param {string} chapterId
+     * @returns {boolean}
+     */
+    hasChapter(chapterId) {
+        return !!(this._packData?.STORY_CHAPTERS?.[chapterId]);
+    }
+
+    /**
+     * 按需加载单个章节（从资源包 fetch），并注入到已加载的 _packData 中
+     *
+     * 用于懒加载模式：当玩家推进到某个需要的新章节时调用。
+     * 加载完成后自动合并到 STORY_CHAPTERS，引擎即可访问。
+     *
+     * @param {string} chapterId - 章节 ID
+     * @returns {Promise<Array>} 章节步骤数组
+     */
+    async loadChapter(chapterId) {
+        // 已加载则直接返回
+        if (this._packData?.STORY_CHAPTERS?.[chapterId]) {
+            return this._packData.STORY_CHAPTERS[chapterId];
+        }
+
+        if (!this._manifest) {
+            throw new Error('[ResourceManager] 资源包未加载，无法按需加载章节');
+        }
+
+        const filePath = this._manifest.chapters?.[chapterId];
+        if (!filePath) {
+            // 回退：按约定路径尝试
+            const fallbackPath = `chapters/${chapterId}.json`;
+            try {
+                const data = await this._fetchJSON(`${this._basePath}/${fallbackPath}`);
+                if (this._packData) {
+                    this._packData.STORY_CHAPTERS[chapterId] = data;
+                }
+                return data;
+            } catch (e) {
+                throw new Error(`章节 "${chapterId}" 在资源包中未定义，且回退路径 ${fallbackPath} 也加载失败`);
+            }
+        }
+
+        try {
+            const data = await this._fetchJSON(`${this._basePath}/${filePath}`);
+            // 注入到已加载的数据中
+            if (this._packData) {
+                this._packData.STORY_CHAPTERS[chapterId] = data;
+            }
+            console.log(`[ResourceManager]   按需加载章节: ${chapterId}`);
+            return data;
+        } catch (e) {
+            throw new Error(`章节 "${chapterId}" 加载失败: ${e.message}`);
+        }
+    }
+
+    /**
+     * 列出所有在 manifest 中注册的章节 ID
+     * @returns {string[]}
+     */
+    listChapterIds() {
+        if (!this._manifest?.chapters) return [];
+        return Object.keys(this._manifest.chapters);
     }
 
     /**

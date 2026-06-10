@@ -57,9 +57,40 @@ export class SaveManager {
 
     _writeSlots(data) {
         try {
-            localStorage.setItem(this._slotKey, JSON.stringify(data));
+            const json = JSON.stringify(data);
+            // 预估大小，超过 4MB 发出警告
+            const estimatedSize = new Blob([json]).size;
+            if (estimatedSize > 4 * 1024 * 1024) {
+                console.warn(`[SaveManager] 存档体积过大 (约 ${(estimatedSize / 1024 / 1024).toFixed(1)}MB)，建议清理旧存档`);
+            }
+            localStorage.setItem(this._slotKey, json);
         } catch (e) {
-            console.error('[SaveManager] Failed to write slots:', e);
+            if (e.name === 'QuotaExceededError' || e.code === 22) {
+                console.error('[SaveManager] localStorage 配额不足，尝试清理旧数据...');
+                // 尝试保留最近 5 个存档，删除其余的
+                this._compactSlots(data);
+            } else {
+                console.error('[SaveManager] Failed to write slots:', e);
+            }
+            throw e; // 向上传递，让 engine 层处理
+        }
+    }
+
+    /**
+     * 存档紧凑：保留最近最多 5 个槽位
+     */
+    _compactSlots(data) {
+        const keys = Object.keys(data).sort();
+        const keep = Math.min(keys.length, 5);
+        const toRemove = keys.slice(0, keys.length - keep);
+        for (const k of toRemove) {
+            delete data[k];
+        }
+        try {
+            localStorage.setItem(this._slotKey, JSON.stringify(data));
+            console.log(`[SaveManager] 已压缩存档，保留 ${keep} 个槽位`);
+        } catch {
+            console.error('[SaveManager] 压缩后仍无法写入，请清理浏览器存储');
         }
     }
 
