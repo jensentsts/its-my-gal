@@ -1,4 +1,9 @@
-[
+/**
+ * resource-packs/default/chapters/possession_prelude.js
+ *
+ * Auto-converted from possession_prelude.json
+ */
+export const chapter_possession_prelude = [
   {
     "sceneId": "ancient_altar",
     "type": "dialogue",
@@ -107,4 +112,4 @@
       }
     ]
   }
-]
+];

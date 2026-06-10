@@ -1,0 +1,126 @@
+/**
+ * resource-packs/default/chapters/meet_elysia.js
+ *
+ * Auto-converted from meet_elysia.json
+ */
+export const chapter_meet_elysia = [
+  {
+    "sceneId": "forest_gate",
+    "type": "dialogue",
+    "characterId": "player",
+    "text": "古石阵后果然有一条隐蔽的小径。我拨开齐腰高的蕨类植物，沿着几乎看不清的路径往里走了大约半个小时，空气渐渐变得湿润而清冷。周围的树木愈发高大，树冠遮天蔽日，只有零星的光斑洒在地上。一种难以言喻的感觉攫住了我——这里的时间似乎流得比外面慢。",
+    "effects": [
+      "dim"
+    ],
+    "screenEffect": "snow?density=20"
+  },
+  {
+    "sceneId": "forest_gate",
+    "type": "dialogue",
+    "characterId": "player",
+    "text": "正想着，前方忽然亮起一团柔和的淡绿色光晕。一个纤细的身影从雾气中缓缓走出。我下意识地停下脚步，呼吸几乎停滞。",
+    "characterChanges": [
+      {
+        "id": "elysia",
+        "action": "enter",
+        "spriteId": "idle",
+        "animation": "fadeIn"
+      }
+    ],
+    "effects": []
+  },
+  {
+    "sceneId": "forest_gate",
+    "type": "dialogue",
+    "characterId": "elysia",
+    "text": "停下脚步，凡人。前方是迷雾森林的禁地——阿瓦隆的边界。凡人踏入其中，将永世迷失于无尽的林间幻境。现在，转身离开，我可以当做没看到你。",
+    "screenEffect": "snow?density=35",
+    "effects": [
+      "vignette"
+    ]
+  },
+  {
+    "sceneId": "forest_gate",
+    "type": "dialogue",
+    "characterId": "player",
+    "text": "她的声音清冽如同山涧流水，每一个字都清晰而有力。我盯着她看了足足五秒才回过神来。她比照片上看起来更美——不，'美'这个词太俗了。她的面容带着一种不属于人间的端庄与疏离，尖尖的耳朵从银发间微微探出，淡绿色的眼瞳像是两汪不见底的深潭。她穿着一袭贴身的淡青色长袍，腰间系着一条编织精细的藤蔓腰带，勾勒出纤细的腰身。",
+    "characterChanges": [
+      {
+        "id": "elysia",
+        "action": "update",
+        "spriteId": "idle",
+        "animation": "pulse"
+      }
+    ]
+  },
+  {
+    "sceneId": "forest_gate",
+    "type": "dialogue",
+    "characterId": "player",
+    "text": "我把手伸进衣领，扯出那枚护身符，又举起祖父的日志。'我是安德鲁的孙子！请看这个——我祖父的日志！照片上的人就是你，对不对？'",
+    "loseItem": "log",
+    "loseApproach": "handOver"
+  },
+  {
+    "sceneId": "forest_gate",
+    "type": "dialogue",
+    "characterId": "elysia",
+    "text": "她接过日志的瞬间，手指微微一颤。她翻到那张照片，指尖轻轻划过相纸表面，沉默了很久。当她再次抬起眼时，那双淡绿色的眸子里多了一层我看不太懂的复杂情绪——有怀念，有悲伤，还有些许苦涩。",
+    "characterChanges": [
+      {
+        "id": "elysia",
+        "action": "update",
+        "spriteId": "sad",
+        "animation": "bounce"
+      }
+    ],
+    "cgChanges": {
+      "action": "enter",
+      "id": "old_photo",
+      "animation": "scaleIn"
+    }
+  },
+  {
+    "sceneId": "forest_gate",
+    "type": "dialogue",
+    "characterId": "elysia",
+    "text": "你是安德鲁的后代？……难怪。你身上带着他的气息。不对——不只是气息。这枚护身符……它选择了你。",
+    "characterChanges": [
+      {
+        "id": "elysia",
+        "action": "update",
+        "spriteId": "shock",
+        "animation": "shake"
+      }
+    ],
+    "cgChanges": {
+      "action": "leave",
+      "animation": "fadeOut"
+    }
+  },
+  {
+    "sceneId": "forest_gate",
+    "type": "dialogue",
+    "characterId": "elysia",
+    "text": "她叹了口气，将日志递还给我，语气软了几分。'森林正在枯萎。一股古老而黑暗的力量在深处蠢蠢欲动。我叫爱莉希雅，是阿瓦隆的守护者。你祖父……他曾是我的战友。既然护身符在你身上亮了，说明命运还没有放弃这片森林。跟我来吧。不过，别指望我会像对老朋友那样对你。'她转过身，长长的银发在雾气中划出一道优雅的弧线。",
+    "characterChanges": [
+      {
+        "id": "elysia",
+        "action": "update",
+        "spriteId": "happy",
+        "animation": "pulse"
+      }
+    ],
+    "gainItem": "log",
+    "gainApproach": "receive"
+  },
+  {
+    "sceneId": "forest_gate",
+    "type": "dialogue",
+    "characterId": "elysia",
+    "text": "她从腰间解下一把匕首，反手递给我。'这是你祖父当年托我保管的祭祀匕首，如今物归原主。剑身上的术式虽然沉睡已久，但若有危机，它自会觉醒。'匕首的剑柄冰凉而沉重，剑身上刻着繁复的纹路，在接触我掌心的瞬间微微发出一丝暖意。",
+    "gainItem": "dagger",
+    "gainApproach": "receive",
+    "jumpChapter": "forest_explore"
+  }
+];

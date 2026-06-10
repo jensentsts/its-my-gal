@@ -72,7 +72,7 @@ export const chapter_exorcism_route = [
     },
     {
         sceneId: 'forest_gate',
-        type: 'ending',
+        type: 'jump',
         endingId: 'sacrifice_end'
     }
 ];

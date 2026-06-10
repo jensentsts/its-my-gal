@@ -1,4 +1,9 @@
-[
+/**
+ * resource-packs/default/chapters/final_choice.js
+ *
+ * Auto-converted from final_choice.json
+ */
+export const chapter_final_choice = [
   {
     "sceneId": "ancient_altar",
     "type": "dialogue",
@@ -59,4 +64,4 @@
       }
     ]
   }
-]
+];

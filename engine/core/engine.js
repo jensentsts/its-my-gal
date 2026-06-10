@@ -140,8 +140,8 @@ export class GalEngine extends EventEmitter {
         // 设置 lastSpeaker
         this.state.setLastSpeaker(this._getSpeakerId());
 
-        // 章节跳转（支持 _end_<endingId> 直接跳转到结局）
-        if (step.jumpChapter) {
+        // 章节跳转（仅 jump / ending / choice 步骤具备跳转能力）
+        if ((step.type === 'jump' || step.type === 'ending' || step.type === 'choice') && step.jumpChapter) {
             if (step.jumpChapter.startsWith('_end_')) {
                 const endingId = step.jumpChapter.slice(5);
                 const endingObj = this.endings.find(e => e.id === endingId);
@@ -246,39 +246,45 @@ export class GalEngine extends EventEmitter {
         this.emit('characters:change', this.state.stageCharacters);
 
         // ---- 跳转步骤：无条件直接跳转（无对话、无交互） ----
-        if (step.type === 'jump') {
-            this.emit('step:jump', { from: this.state.currentChapterId, to: step.jumpChapter });
-            if (step.jumpChapter) {
-                this.state.truncateHistoryLogs(this.state.historyLogs.length - 1);
-                this.state.setChapter(step.jumpChapter, 0);
-                this.state.setLastSpeaker(null);
-            } else {
-                this.state.advanceStep();
+        // 内部抽象：ending_trigger 是 jump_step 的派生，通过 endingId 标识
+        // ending 步骤与 jump 步骤的 ending_trigger 派生行为一致
+        if (step.type === 'jump' || step.type === 'ending') {
+            if (step.endingId) {
+                // ending_trigger / ending step：展示结局描述后触发结局
+                const endingObj = this.endings.find(e => e.id === step.endingId);
+                if (endingObj) {
+                    this.state.setPendingEnding(endingObj);
+                    this.emit('step:ending-pending', endingObj);
+                    const fakeStep = {
+                        type: 'dialogue',
+                        characterId: null,
+                        text: endingObj.description,
+                        speed: 25,
+                        autoAdvance: false
+                    };
+                    this._startTypewriter(fakeStep.text, fakeStep.speed);
+                    return;
+                } else {
+                    this._triggerEnding({ id: step.endingId, title: step.endingId, description: '' });
+                    return;
+                }
             }
-            this._executeStep();
+            // 常规跳转（仅 jump 步骤支持，ending 步骤必须设置 endingId）
+            if (step.type === 'jump') {
+                this.emit('step:jump', { from: this.state.currentChapterId, to: step.jumpChapter });
+                if (step.jumpChapter) {
+                    this.state.truncateHistoryLogs(this.state.historyLogs.length - 1);
+                    this.state.setChapter(step.jumpChapter, 0);
+                    this.state.setLastSpeaker(null);
+                } else {
+                    this.state.advanceStep();
+                }
+                this._executeStep();
+                return;
+            }
+            // ending 步骤无 endingId 时：视为章节末尾，尝试匹配结局
+            this._autoMatchEnding();
             return;
-        }
-
-        // ---- 结局 ----
-        if (step.type === 'ending') {
-            const endingObj = this.endings.find(e => e.id === step.endingId);
-            if (endingObj) {
-                this.state.setPendingEnding(endingObj);
-                this.emit('step:ending-pending', endingObj);
-                // 生成伪对话步骤展示结局描述
-                const fakeStep = {
-                    type: 'dialogue',
-                    characterId: null,
-                    text: endingObj.description,
-                    speed: 25,
-                    autoAdvance: false
-                };
-                this._startTypewriter(fakeStep.text, fakeStep.speed);
-                return;
-            } else {
-                this._triggerEnding({ id: step.endingId, title: step.endingId, description: '' });
-                return;
-            }
         }
 
         // ---- 对话 ----

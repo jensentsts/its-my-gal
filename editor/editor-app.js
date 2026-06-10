@@ -11,7 +11,7 @@
  *  - 缩放、平移、自动布局
  */
 
-import * as GameData from '../game/index.js';
+import * as GameData from '../resource-packs/default/index.js';
 import { ResourceManager, validatePackStructure, validatePackData, EffectsManager } from '../engine/index.js';
 
 const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
@@ -48,6 +48,9 @@ function analyzeTree(chapters) {
 
         for (const step of steps) {
             if (step.jumpChapter) targets.add(step.jumpChapter);
+            if (step.type === 'jump' && step.endingId) {
+                targets.add('_end_' + step.endingId);
+            }
             if (step.type === 'choice' && step.choices) {
                 for (const ch of step.choices) {
                     if (ch.jumpChapter) targets.add(ch.jumpChapter);
@@ -451,6 +454,7 @@ createApp({
         const selectedEndingId = ref(null);
         const editingStepIndex = ref(null);
         const hoveredNodeId = ref(null);
+        const selectedEdge = ref(null); // 当前选中的连线
 
         // 树视图状态
         const treePanel = ref(null);
@@ -539,6 +543,7 @@ createApp({
             fromChoiceIdx: null,
             mouseX: 0, mouseY: 0,
             snapTargetId: null, // 磁吸目标节点 ID
+            isEndingPort: false, // 当前拖拽的端口是否为 ending_trigger（仅限连接到结局节点）
         });
 
         // 正在缩放的节点
@@ -612,17 +617,56 @@ createApp({
             const allEdges = [];
 
             // ── Phase 1: 遍历所有章节，收集跳转关系 ──────────────────
+            // 内部抽象：所有"分支步骤"（branch_step）共享同一种处理模式，
+            // 即从当前步骤引出连线连接到目标节点。
+            //   branch_step (内部)
+            //   ├── jump_step ── type: 'jump'（含 ending_trigger 派生）
+            //   └── choice_step ── type: 'choice'
+            //
             for (const [cid, steps] of Object.entries(chapters)) {
                 let portIdx = 0;
                 steps.forEach((step, si) => {
+                    // ── jump step（含 ending_trigger 派生）──
                     if (step.type === 'jump') {
-                        const tid = step.jumpChapter;
-                        if (tid) {
-                            if (!incomingSources[tid]) incomingSources[tid] = [];
-                            incomingSources[tid].push({ fromId: cid, portIdx, isEnding: tid.startsWith('_end_') });
+                        // ending_trigger：jump_step 的派生——通过 endingId 触发结局
+                        if (step.endingId) {
+                            const endNodeId = '_end_' + step.endingId;
+                            if (!endingNodes[endNodeId]) {
+                                const endPos = nodePositions[endNodeId] || { x: 0, y: 0 };
+                                endingNodes[endNodeId] = createEndingNodeData(endNodeId, step.endingId, endPos);
+                            }
+                            if (!incomingSources[endNodeId]) incomingSources[endNodeId] = [];
+                            incomingSources[endNodeId].push({ fromId: cid, portIdx, isEnding: true });
+                            allEdges.push({ fromId: cid, toId: endNodeId, portIdx, stepIdx: si, isEnding: true });
+                            portIdx++;
+                        } else if (step.jumpChapter) {
+                            // 常规跳转目标
+                            const tid = step.jumpChapter;
+                            if (tid) {
+                                if (!incomingSources[tid]) incomingSources[tid] = [];
+                                incomingSources[tid].push({ fromId: cid, portIdx, isEnding: tid.startsWith('_end_') });
+                            }
+                            allEdges.push({ fromId: cid, toId: tid || null, portIdx, stepIdx: si, type: 'jump' });
+                            portIdx++;
+                        } else {
+                            // 既无 endingId 也无 jumpChapter → 仍预留端口位置（用于未配置的占位端口）
+                            portIdx++;
                         }
-                        allEdges.push({ fromId: cid, toId: tid || null, portIdx, stepIdx: si, type: 'jump' });
-                        portIdx++;
+                    } else if (step.type === 'ending') {
+                        // ending step：结局触发——连接到结局节点
+                        if (step.endingId) {
+                            const endNodeId = '_end_' + step.endingId;
+                            if (!endingNodes[endNodeId]) {
+                                const endPos = nodePositions[endNodeId] || { x: 0, y: 0 };
+                                endingNodes[endNodeId] = createEndingNodeData(endNodeId, step.endingId, endPos);
+                            }
+                            if (!incomingSources[endNodeId]) incomingSources[endNodeId] = [];
+                            incomingSources[endNodeId].push({ fromId: cid, portIdx, isEnding: true });
+                            allEdges.push({ fromId: cid, toId: endNodeId, portIdx, stepIdx: si, isEnding: true });
+                            portIdx++;
+                        } else {
+                            portIdx++;
+                        }
                     } else if (step.type === 'choice' && step.choices) {
                         step.choices.forEach((ch, ci) => {
                             if (ch.jumpChapter) {
@@ -633,24 +677,8 @@ createApp({
                             }
                             portIdx++;
                         });
-                    } else if (step.type === 'ending' && step.endingId) {
-                        const endNodeId = '_end_' + step.endingId;
-                        if (!endingNodes[endNodeId]) {
-                            const endPos = nodePositions[endNodeId] || { x: 0, y: 0 };
-                            endingNodes[endNodeId] = createEndingNodeData(endNodeId, step.endingId, endPos);
-                        }
-                        if (!incomingSources[endNodeId]) incomingSources[endNodeId] = [];
-                        incomingSources[endNodeId].push({ fromId: cid, portIdx, isEnding: true });
-                        allEdges.push({ fromId: cid, toId: endNodeId, portIdx, stepIdx: si, isEnding: true });
-                        portIdx++;
-                    } else if (step.jumpChapter) {
-                        // dialogue 后的直接跳转
-                        const tid = step.jumpChapter;
-                        if (!incomingSources[tid]) incomingSources[tid] = [];
-                        incomingSources[tid].push({ fromId: cid, portIdx, isEnding: tid.startsWith('_end_') });
-                        allEdges.push({ fromId: cid, toId: tid, portIdx, stepIdx: si });
-                        portIdx++;
                     }
+                    // 其他步骤类型（dialogue 等）不具备跳转能力，不构建连线
                 });
             }
 
@@ -678,6 +706,10 @@ createApp({
                         }
                     };
                     if (step.jumpChapter) checkTarget(step.jumpChapter);
+                    // ending_trigger：jump 的派生，通过 endingId 引用结局
+                    if (step.type === 'jump' && step.endingId) {
+                        checkTarget('_end_' + step.endingId);
+                    }
                     if (step.type === 'choice' && step.choices) {
                         for (const ch of step.choices) {
                             if (ch.jumpChapter) checkTarget(ch.jumpChapter);
@@ -698,7 +730,7 @@ createApp({
                 const bottomPorts = buildBottomPorts(cid, steps, sW, sH);
 
                 // 顶部入口端口
-                const topPorts = buildTopPorts(incomingSources[cid] || [], sW, sH, pos);
+                const topPorts = buildTopPorts(incomingSources[cid] || [], sW, sH, pos, isEntryPoint(cid));
 
                 nodes.push({
                     id: cid, label: cid,
@@ -762,7 +794,7 @@ createApp({
          *  - jump 类型 step → 1 个端口
          *  - choice 类型 step → 每个选项 1 个端口
          *  - dialogue 类型 step 带 jumpChapter → 1 个端口
-         *  - ending 类型 step → 1 个端口
+         *  - jump 类型 step → 1 个端口（endingId 非空时为 ending_trigger 派生）
          *  端口不会因为目标未设置而被撤销，便于开发者提前规划连线。
          */
         function buildBottomPorts(cid, steps, sW, sH) {
@@ -770,16 +802,53 @@ createApp({
             let portIdx = 0;
             const pos = nodePositions[cid] || { x: 0, y: 0 };
             steps.forEach((step, si) => {
+                // ═══ 分支步骤（内部概念）═══
+                // jump / choice / dialogue+jumpChapter 都属于"在章节上引出分支"的步骤。
+                // 统一抽象：这些步骤在树节点上产生端口，连接至其他节点。
+                //
+                //   branch_step (内部) ─── 引出分支的步骤
+                //   ├── jump_step ──────── 无条件跳转
+                //   │   └── ending_trigger ─ 跳转派生→触发结局（endingId 不为空）
+                //   └── choice_step ────── 用户选项分支
+                //
+                // ── jump step（含 ending_trigger 派生）──
                 if (step.type === 'jump') {
-                    // jump step：无论是否设置了目标，都创建端口
-                    bottomPorts.push({
-                        stepIdx: si, targetId: step.jumpChapter || '',
-                        label: '⤵ ' + (step.jumpChapter || '?'), portIdx: portIdx,
-                        type: 'jump', hasTarget: !!step.jumpChapter,
-                        tooltipText: '[跳转] → ' + (step.jumpChapter || '未设置目标'),
-                        stepBrief: stepTextBrief(step),
-                    });
-                    portIdx++;
+                    // ending_trigger：jump_step 的派生——endingId 非空时标识为结局触发
+                    if (step.endingId) {
+                        const endingName = (gameEndings.find(e => e.id === step.endingId)?.title || step.endingId);
+                        bottomPorts.push({
+                            stepIdx: si, targetId: '_end_' + step.endingId,
+                            label: '🎬', portIdx: portIdx, isEnding: true,
+                            type: 'jump-ending', hasTarget: true,
+                            tooltipText: '[结局触发] ' + endingName,
+                            stepBrief: '结局: ' + endingName,
+                        });
+                        portIdx++;
+                    } else if (step.jumpChapter) {
+                        // 常规跳转目标（含 _end_ 快捷跳转）
+                        const targetIsEnding = step.jumpChapter.startsWith('_end_');
+                        bottomPorts.push({
+                            stepIdx: si, targetId: step.jumpChapter || '',
+                            label: '⤵ ' + (step.jumpChapter || '?'), portIdx: portIdx,
+                            type: 'jump', hasTarget: !!step.jumpChapter,
+                            isEnding: targetIsEnding,
+                            tooltipText: targetIsEnding
+                                ? '[结局] ' + step.jumpChapter
+                                : '[跳转] → ' + (step.jumpChapter || '未设置目标'),
+                            stepBrief: stepTextBrief(step),
+                        });
+                        portIdx++;
+                    } else {
+                        // 占位端口：允许从未设置目标的跳转步骤拖出连线
+                        bottomPorts.push({
+                            stepIdx: si, targetId: '',
+                            label: '⤵ ?', portIdx: portIdx,
+                            type: 'jump', hasTarget: false,
+                            tooltipText: '[跳转] 未设置目标',
+                            stepBrief: stepTextBrief(step),
+                        });
+                        portIdx++;
+                    }
                 } else if (step.type === 'choice' && step.choices) {
                     // choice step：每个选项一个端口，无论是否设置了跳转目标
                     step.choices.forEach((ch, ci) => {
@@ -794,28 +863,30 @@ createApp({
                         });
                         portIdx++;
                     });
-                } else if (step.type === 'ending' && step.endingId) {
-                    const endingName = (gameEndings.find(e => e.id === step.endingId)?.title || step.endingId);
-                    bottomPorts.push({
-                        stepIdx: si, targetId: '_end_' + step.endingId,
-                        label: '🎬', portIdx: portIdx, isEnding: true,
-                        type: 'ending', hasTarget: true,
-                        tooltipText: '[结局] ' + endingName,
-                        stepBrief: '结局: ' + endingName,
-                    });
-                    portIdx++;
-                } else if (step.type === 'dialogue' && step.jumpChapter) {
-                    const speaker = step.characterId ? getCharName(step.characterId) + ': ' : '';
-                    bottomPorts.push({
-                        stepIdx: si, targetId: step.jumpChapter,
-                        label: '→' + step.jumpChapter, portIdx: portIdx,
-                        type: 'dialogue-jump', hasTarget: true,
-                        tooltipText: '[对话跳转] ' + speaker + (step.text?.substring(0, 20) || '')
-                            + ' → ' + step.jumpChapter,
-                        stepBrief: stepTextBrief(step),
-                    });
-                    portIdx++;
+                } else if (step.type === 'ending') {
+                    // ending step：结局触发——只能连接到结局节点
+                    if (step.endingId) {
+                        const endingName = (gameEndings.find(e => e.id === step.endingId)?.title || step.endingId);
+                        bottomPorts.push({
+                            stepIdx: si, targetId: '_end_' + step.endingId,
+                            label: '🎬', portIdx: portIdx, isEnding: true,
+                            type: 'jump-ending', hasTarget: true,
+                            tooltipText: '[结局触发] ' + endingName,
+                            stepBrief: '结局: ' + endingName,
+                        });
+                        portIdx++;
+                    } else {
+                        bottomPorts.push({
+                            stepIdx: si, targetId: '',
+                            label: '🎬?', portIdx: portIdx,
+                            type: 'jump-ending', hasTarget: false, isEnding: true,
+                            tooltipText: '[结局触发] 未选择结局',
+                            stepBrief: '结局触发: (未选择结局)',
+                        });
+                        portIdx++;
+                    }
                 }
+                // 其他步骤类型（dialogue 等）不具备跳转能力，不产生出口端口
             });
             const totalBP = Math.max(1, bottomPorts.length);
             bottomPorts.forEach((bp, i) => {
@@ -827,9 +898,24 @@ createApp({
             return bottomPorts;
         }
 
-        /** 构建顶部入口端口 */
-        function buildTopPorts(incomingSrcs, sW, sH, pos) {
-            if (incomingSrcs.length === 0) return [];
+        /** 构建顶部入口端口
+         *  非入口章节节点恒常显示一个入口端口（即使当前无入度），
+         *  表示该节点可接受外部连接；入口节点不显示入口端口（不允许有入度）。 */
+        function buildTopPorts(incomingSrcs, sW, sH, pos, isEntry) {
+            if (isEntry) return [];
+            // 无入度时返回占位端口（表示可接受连接）
+            if (incomingSrcs.length === 0) {
+                return [{
+                    fromId: null,
+                    portIdx: 0,
+                    isEnding: false,
+                    rpX: sW / 2, rpY: 0,
+                    pxWorld: pos.x,
+                    pyWorld: pos.y - sH / 2,
+                    multiSource: false,
+                    sourceCount: 0,
+                }];
+            }
             return [{
                 fromId: incomingSrcs[0].fromId,
                 portIdx: 0,
@@ -954,8 +1040,12 @@ createApp({
         const chapterIncomingCount = computed(() => incoming.value[selectedChapterId.value] || 0);
 
         const selectedEndingPreview = computed(() => {
-            if (!editingStep.value || editingStep.value.type !== 'ending') return null;
-            return gameEndings.find(e => e.id === editingStep.value.endingId) || null;
+            if (!editingStep.value) return null;
+            // ending_trigger 是 jump_step 的派生，通过 endingId 标识
+            if (editingStep.value.type === 'ending' || (editingStep.value.type === 'jump' && editingStep.value.endingId)) {
+                return gameEndings.find(e => e.id === editingStep.value.endingId) || null;
+            }
+            return null;
         });
 
         // ── 结局节点编辑数据 ──────────────────────────────────────────
@@ -987,6 +1077,9 @@ createApp({
                                 result.push({ id: cid, choiceText: ch.text });
                             }
                         }
+                    }
+                    if (step.type === 'jump' && step.endingId === selectedEndingId.value.slice(5)) {
+                        result.push({ id: cid, stepIdx: steps.indexOf(step), text: '[结局触发]' });
                     }
                     if (step.type === 'ending' && step.endingId === selectedEndingId.value.slice(5)) {
                         result.push({ id: cid, stepIdx: steps.indexOf(step), text: '[结局触发]' });
@@ -1029,6 +1122,13 @@ createApp({
             document.addEventListener('dragstart', onGlobalDragStart);
             // 全局键盘快捷键
             document.addEventListener('keydown', onGlobalKeyDown);
+            // 从 gameConfig 读取标题并同步到页面 title
+            document.title = '剧情树节点编辑器 — ' + (gameConfig.title || 'Galgame');
+        });
+
+        // 监听 title 变化（用户可在游戏设置中修改标题）
+        watch(() => gameConfig.title, (newTitle) => {
+            document.title = '剧情树节点编辑器 — ' + (newTitle || 'Galgame');
         });
 
         onUnmounted(() => {
@@ -1111,12 +1211,17 @@ createApp({
             function endH(id) { return nodeSizes[id]?.height || DEFAULT_H; }
 
             // 构建引用映射：endingId → [sourceChapterId]
+            // jump_step 的 endingId 派生（ending_trigger）和处理独立 ending 类型一并统计
             const sourceMap = {};
             for (const [cid, steps] of Object.entries(chapters)) {
                 for (const step of steps) {
-                    if (step.type === 'ending' && step.endingId) {
-                        if (!sourceMap[step.endingId]) sourceMap[step.endingId] = [];
-                        if (!sourceMap[step.endingId].includes(cid)) sourceMap[step.endingId].push(cid);
+                    let endId = null;
+                    if (step.type === 'jump' && step.endingId) {
+                        endId = step.endingId; // ending_trigger：jump 的派生
+                    }
+                    if (endId) {
+                        if (!sourceMap[endId]) sourceMap[endId] = [];
+                        if (!sourceMap[endId].includes(cid)) sourceMap[endId].push(cid);
                     }
                 }
             }
@@ -1516,6 +1621,10 @@ createApp({
                 characterId: null,
                 text: '新对话段落...',
                 effects: [],
+            }, {
+                sceneId: '',
+                type: 'jump',
+                jumpChapter: '',
             }];
             nodePositions[newId] = { x: worldX, y: worldY };
             selectedChapterId.value = newId;
@@ -1682,13 +1791,9 @@ createApp({
         let edgeDragState = null; // { edge, fromPort, toPort, isDragging }
 
         function onEdgeClick(edge) {
-            // 点击曲线：选中来源节点或目标节点
-            if (selectedChapterId.value === edge.from) {
-                selectNode(edge.to);
-            } else {
-                selectNode(edge.from);
-            }
-            showToast(`连线: ${edge.from} → ${edge.to}`);
+            // 点击曲线：选中该连线，支持按 Delete 删除
+            selectedEdge.value = edge;
+            showToast(`选中连线: ${edge.from} → ${edge.to}`);
         }
 
         function onEdgeMouseDown(e, edge) {
@@ -1721,6 +1826,7 @@ createApp({
             portDragging.fromPortIdx = bp.portIdx;
             portDragging.fromStepIdx = bp.stepIdx;
             portDragging.fromChoiceIdx = bp.choiceIdx;
+            portDragging.isEndingPort = !!bp.isEnding; // 标记是否为 ending_trigger
             portDragging.mouseX = e.clientX;
             portDragging.mouseY = e.clientY;
 
@@ -1730,34 +1836,26 @@ createApp({
             };
             const onUp = (ev) => {
                 portDragging.active = false;
+                portDragging.isEndingPort = false;
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
                 const rect = treePanel.value.getBoundingClientRect();
                 const sx = ev.clientX - rect.left;
                 const sy = ev.clientY - rect.top;
                 const wp = screenToWorld(sx, sy);
-                // 磁吸检测
+                // 磁吸检测（ending_trigger 由 portDragCurve 中的逻辑限制目标类型）
                 const snapped = findSnapTarget(wp);
                 const target = snapped || treeNodes.value.find(n => {
                     if (n.id === edge.from) return false;
+                    // ending_trigger 端口只能连接到结局节点
+                    if (bp.isEnding && !n.id.startsWith('_end_')) return false;
                     const dx = Math.abs(n.x - wp.x);
                     const dy = Math.abs(n.y - wp.y);
                     return dx < (n.width || 200) / 2 + 30 && dy < (n.height || 90) / 2 + 30;
                 });
                 if (target) {
-                    const steps = chapters[portDragging.fromNodeId];
-                    if (steps) {
-                        const step = steps[bp.stepIdx];
-                        if (step) {
-                            if (bp.choiceIdx !== undefined && step.choices) {
-                                step.choices[bp.choiceIdx].jumpChapter = target.id;
-                            } else {
-                                step.jumpChapter = target.id;
-                            }
-                            bp.targetId = target.id;
-                            showToast(`跳转目标已更新 → ${target.id}`);
-                        }
-                    }
+                    portDragging.fromPortIdx = bp.portIdx;
+                    updatePortTarget(bp, target.id);
                 }
             };
             document.addEventListener('mousemove', onMove);
@@ -1782,12 +1880,61 @@ createApp({
 
         // ── 连接端口（底部圆形 → 拖拽 → 目标节点顶部圆角正方形）──────
         function startPortDrag(e, nodeId, portIdx, port) {
-            if (port.isEnding) { jumpToPortTarget(port); return; }
+            // ending_trigger 端口：允许拖拽，但只能连接到结局节点
+            if (port.isEnding) {
+                // 记录为 ending_trigger 端口，拖拽曲线和磁吸逻辑会据此限制目标
+                portDragging.active = true;
+                portDragging.fromNodeId = nodeId;
+                portDragging.fromPortIdx = portIdx;
+                portDragging.fromStepIdx = port.stepIdx;
+                portDragging.fromChoiceIdx = port.choiceIdx;
+                portDragging.isEndingPort = true;
+                portDragging.snapTargetId = null;
+                portDragging.mouseX = e.clientX;
+                portDragging.mouseY = e.clientY;
+
+                const onMove = (ev) => {
+                    portDragging.mouseX = ev.clientX;
+                    portDragging.mouseY = ev.clientY;
+                };
+                const onUp = (ev) => {
+                    portDragging.active = false;
+                    portDragging.isEndingPort = false;
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    const targetId = portDragging.snapTargetId;
+                    if (targetId) {
+                        if (!targetId.startsWith('_end_')) {
+                            showToast('❌ 结局触发端口只能连接到结局节点');
+                            return;
+                        }
+                        updatePortTarget(port, targetId);
+                    } else {
+                        const rect = treePanel.value.getBoundingClientRect();
+                        const sx = ev.clientX - rect.left;
+                        const sy = ev.clientY - rect.top;
+                        const wp = screenToWorld(sx, sy);
+                        const target = treeNodes.value.find(n => {
+                            if (n.id === nodeId || !n.id.startsWith('_end_')) return false;
+                            const dx = Math.abs(n.x - wp.x);
+                            const dy = Math.abs(n.y - wp.y);
+                            return dx < (n.width || 200) / 2 + 30 && dy < (n.height || 90) / 2 + 30;
+                        });
+                        if (target) updatePortTarget(port, target.id);
+                    }
+                    portDragging.snapTargetId = null;
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+                return;
+            }
+
             portDragging.active = true;
             portDragging.fromNodeId = nodeId;
             portDragging.fromPortIdx = portIdx;
             portDragging.fromStepIdx = port.stepIdx;
             portDragging.fromChoiceIdx = port.choiceIdx;
+            portDragging.isEndingPort = false;
             portDragging.snapTargetId = null;
             portDragging.mouseX = e.clientX;
             portDragging.mouseY = e.clientY;
@@ -1838,11 +1985,23 @@ createApp({
             const step = steps[port.stepIdx];
             if (!step) return;
             if (port.choiceIdx !== undefined && step.choices) {
+                // choice step 的选项端口
                 step.choices[port.choiceIdx].jumpChapter = newTargetId;
+            } else if (port.type === 'jump-ending' || port.isEnding) {
+                // ending_trigger 端口（jump_step 的派生）—— 引擎限制只能指向结局
+                if (newTargetId.startsWith('_end_')) {
+                    step.endingId = newTargetId.slice(5);
+                    step.jumpChapter = '';
+                } else {
+                    showToast('❌ 结局触发只能连接到结局节点（_end_*）');
+                    return;
+                }
             } else {
+                // 常规跳转端口
                 step.jumpChapter = newTargetId;
             }
             port.targetId = newTargetId;
+            port.isEnding = newTargetId.startsWith('_end_');
             showToast(`跳转目标已更新 → ${newTargetId}`);
         }
 
@@ -1865,6 +2024,8 @@ createApp({
             let snapDist = snapThreshold;
             for (const node of treeNodes.value) {
                 if (node.id === portDragging.fromNodeId) continue;
+                // ending_trigger 端口只能磁吸到结局节点
+                if (portDragging.isEndingPort && !node.id.startsWith('_end_')) continue;
                 const dx = node.x - wp.x;
                 const dy = node.y - wp.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
@@ -2441,6 +2602,10 @@ createApp({
                 characterId: null,
                 text: '新对话段落...',
                 effects: [],
+            }, {
+                sceneId: '',
+                type: 'jump',
+                jumpChapter: '',
             }];
 
             // 放置在画布中央附近
@@ -2545,7 +2710,7 @@ createApp({
                                 if (ch.jumpChapter === endNodeId) ch.jumpChapter = '';
                             }
                         }
-                        if (step.type === 'ending' && step.endingId === endingId) {
+                        if (step.type === 'jump' && step.endingId === endingId) {
                             step.endingId = '';
                         }
                     }
@@ -2599,14 +2764,29 @@ createApp({
                 text: '新对话...',
                 effects: [],
             };
-            steps.push(newStep);
-            editingStepIndex.value = steps.length - 1;
-            showToast(`已添加步骤 #${steps.length}`);
+            // 在末尾 jump step 之前插入（保留章节末尾的 jump step）
+            const insertIdx = steps.length > 0 && steps[steps.length - 1]?.type === 'jump'
+                ? steps.length - 1 : steps.length;
+            steps.splice(insertIdx, 0, newStep);
+            editingStepIndex.value = insertIdx;
+            showToast(`已添加步骤 #${insertIdx + 1}`);
+        }
+
+        /** 初始化 jump step 的 UI 模式（_jumpMode = 'chapter' | 'ending'） */
+        function setDefaultJumpMode(step) {
+            if (!step._jumpMode) {
+                step._jumpMode = step.endingId ? 'ending' : 'chapter';
+            }
         }
 
         function deleteStep(index) {
             if (!selectedChapterId.value) return;
             const steps = chapters[selectedChapterId.value];
+            // 禁止删除末尾的 jump step（章节末端标记）
+            if (index === steps.length - 1 && steps[index]?.type === 'jump') {
+                showToast('⚠ 章节末尾的跳转步骤不可删除，用于标记章节末端');
+                return;
+            }
             if (!confirm(`确定删除步骤 #${index + 1} 吗？`)) return;
             steps.splice(index, 1);
             if (editingStepIndex.value === index) {
@@ -2746,14 +2926,18 @@ createApp({
         function stepTextBrief(step) {
             if (!step) return '';
             if (step.type === 'choice') return `[分支] ${(step.text || '').substring(0, 40)}...`;
-            if (step.type === 'ending') return `[结局] → ${step.endingId || ''}`;
-            if (step.type === 'jump') return `[跳转] → ${step.jumpChapter || '(无目标)'}`;
-            if (step.text) return step.text.substring(0, 50) + (step.text.length > 50 ? '...' : '');
+            if (step.type === 'ending') return `[结局触发] → ${step.endingId || '(未选择结局)'}`;
+            if (step.type === 'jump') {
+                if (step.endingId) return `[结局触发] → ${step.endingId}`;
+                return `[跳转] → ${step.jumpChapter || '(无目标)'}`;
+            }
+            if (step.text) return step.text.substring(0, 50) + (step.text.length > 50 ? ' ' : '');
             return '(空对话)';
         }
 
-        function stepTypeLabel(type) {
-            const map = { dialogue: '对话', choice: '分支', ending: '结局', jump: '跳转' };
+        function stepTypeLabel(type, step) {
+            if (type === 'ending' || (type === 'jump' && step?.endingId)) return '结局触发';
+            const map = { dialogue: '对话', choice: '分支', jump: '跳转' };
             return map[type] || type || '对话';
         }
 
@@ -3142,9 +3326,10 @@ createApp({
                 if (editingGlobalSearch.value) { endGlobalSearch(); e.preventDefault(); return; }
                 if (showZoomInput.value) { showZoomInput.value = false; e.preventDefault(); return; }
                 // 取消选中
-                if (selectedChapterId.value || selectedEndingId.value) {
+                if (selectedChapterId.value || selectedEndingId.value || selectedEdge.value) {
                     selectedChapterId.value = null;
                     selectedEndingId.value = null;
+                    selectedEdge.value = null;
                     editingStepIndex.value = null;
                     clearNodeSelection();
                     e.preventDefault();
@@ -3192,8 +3377,38 @@ createApp({
                 return;
             }
 
-            // Delete / Backspace: 删除选中的节点（支持批量，含结局节点）
+            // Delete / Backspace: 删除选中的连线或节点
             if (key === 'Delete' || key === 'Backspace') {
+                // 优先删除选中的连线
+                if (selectedEdge.value) {
+                    e.preventDefault();
+                    const edge = selectedEdge.value;
+                    // 找到对应步骤并清除跳转目标
+                    const fromNode = treeNodes.value.find(n => n.id === edge.from);
+                    if (fromNode) {
+                        const bp = (fromNode.bottomPorts || []).find(p => p.targetId === edge.to);
+                        if (bp) {
+                            const steps = chapters[edge.from];
+                            if (steps) {
+                                const step = steps[bp.stepIdx];
+                                if (step) {
+                                    if (bp.choiceIdx !== undefined && step.choices) {
+                                        step.choices[bp.choiceIdx].jumpChapter = '';
+                                    } else if (step.endingId) {
+                                        step.endingId = '';
+                                    } else {
+                                        step.jumpChapter = '';
+                                    }
+                                    bp.targetId = '';
+                                    bp.hasTarget = false;
+                                    showToast(`已删除连线: ${edge.from} → ${edge.to}`);
+                                }
+                            }
+                        }
+                    }
+                    selectedEdge.value = null;
+                    return;
+                }
                 const multiIds = Object.keys(selectedNodeIds);
                 if (multiIds.length > 1) {
                     e.preventDefault();
@@ -3336,7 +3551,7 @@ createApp({
             chapters, originalChapters,
             chapterDescriptions,
             // 状态
-            selectedChapterId, selectedEndingId, editingStepIndex, hoveredNodeId,
+            selectedChapterId, selectedEndingId, selectedEdge, editingStepIndex, hoveredNodeId,
             treePanel, viewScale, panX, panY, nodePositions,
             dragging, panning, selection, selectedNodeIds,
             contextMenu, showGameSettings, editableGameConfig,
@@ -3369,7 +3584,7 @@ createApp({
             onNodeMouseDown,
             selectNode, selectStep,
             addChapter, addEndingNode, addEndingNodeAtPos, deleteChapter, onChapterIdChange,
-            addStep, deleteStep, moveStep,
+            addStep, setDefaultJumpMode, deleteStep, moveStep,
             addChoice, removeChoice,
             onCGChange, initCGForm, addCharChange, removeCharChange, onCharChangeField, syncCharChangesToStep,
             toggleEffect,

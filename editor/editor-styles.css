@@ -328,17 +328,27 @@ img {
 .tree-node {
     position: absolute;
     width: 200px;
+    height: 90px;
     background: var(--bg-surface);
     border: 2px solid var(--border-color);
     border-radius: var(--radius-md);
-    padding: 10px 12px;
     cursor: pointer;
     user-select: none;
     pointer-events: auto;
     box-shadow: var(--shadow-sm);
     transition: border-color 0.2s, box-shadow 0.2s, transform 0.1s;
     transform: translate(-50%, -50%);
-    overflow: visible; /* 端口延伸至节点外部时不会被裁剪 */
+    overflow: visible; /* 让端口完全可见以正确显示对外连接状态 */
+}
+
+/* 节点内容区——负责裁剪文字溢出，端口不在此容器内因此不受影响 */
+.node-content {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    padding: 10px 12px;
+    pointer-events: none;
 }
 
 .tree-node:hover {
@@ -363,8 +373,7 @@ img {
     border: 2px solid #c05050;
     background: #2a1a1a;
     border-radius: 20px;
-    width: 180px !important;
-    min-height: 50px !important;
+    min-width: 140px;
 }
 
 .tree-node.node-chapter {
@@ -417,6 +426,11 @@ img {
 .node-top-port:hover { background: var(--accent-green-bright); transform: scale(1.2); }
 .node-top-port.port-ending { background: #8a3a3a; border-color: #c05050; }
 .node-top-port.port-ending:hover { background: #e05050; }
+/* 多来源入口端口：蓝色调，表示有多个源节点汇聚至此 */
+.node-top-port.port-multi { background: #4a6a8a; border-color: #5a8aaa; }
+.node-top-port.port-multi:hover { background: #6a9aba; }
+/* 无来源入口端口（孤立节点保留装饰）：暗色调，表示无入度连接 */
+.node-top-port.port-unlinked { background: #3a3a4a; border-color: #5a5a6a; opacity: 0.6; }
 
 /* 底部出口端口（圆形）—— 一半被节点遮住，定位于弧线起点 */
 .node-bottom-ports {
@@ -568,6 +582,8 @@ img {
     font-size: 11px;
     color: var(--text-secondary);
     margin-bottom: 4px;
+    overflow: hidden;
+    white-space: nowrap;
 }
 
 .node-step-count { color: var(--accent-green-bright); }
@@ -1263,6 +1279,41 @@ img {
     font-size: 12px;
     color: var(--text-secondary);
     line-height: 1.6;
+}
+
+/* ====================================================================
+   跳转模式开关（jump_step 的常规跳转 / ending_trigger 切换）
+   ==================================================================== */
+.jump-mode-toggle {
+    display: flex;
+    gap: 8px;
+    padding: 4px 0;
+}
+.toggle-option {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+}
+.toggle-option:hover {
+    border-color: var(--accent-green);
+    background: var(--bg-surface);
+}
+.toggle-option.active {
+    border-color: var(--accent-green);
+    background: #1a2a1a;
+    color: var(--accent-green-bright);
+}
+.toggle-option input[type="radio"] {
+    display: none;
 }
 
 /* ====================================================================

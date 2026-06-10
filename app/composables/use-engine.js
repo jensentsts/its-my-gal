@@ -15,9 +15,6 @@ import { GalEngine, EffectsManager, ResourceManager,
          getDynamicItemDescription as getDynamicDesc,
          getItemIcon as getIcon, getItemImage as getImage, getItemName as getName,
          DEFAULT_ITEM_ANIMATION_PRESETS } from '../../engine/index.js';
-// 静态导入回退数据（当不使用资源包时）
-import * as GameData from '../../game/index.js';
-
 export function useEngine() {
     // ---- 引擎实例 ----
     const engine = Vue.ref(null);

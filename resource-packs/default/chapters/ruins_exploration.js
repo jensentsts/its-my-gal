@@ -1,4 +1,9 @@
-[
+/**
+ * resource-packs/default/chapters/ruins_exploration.js
+ *
+ * Auto-converted from ruins_exploration.json
+ */
+export const chapter_ruins_exploration = [
   {
     "sceneId": "ruins_entrance",
     "type": "dialogue",
@@ -93,4 +98,4 @@
       }
     ]
   }
-]
+];

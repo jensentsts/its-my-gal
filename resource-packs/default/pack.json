@@ -16,17 +16,23 @@
   },
   "chapters": {
     "body_explore": "chapters/body_explore.json",
+    "crystal_chamber": "chapters/crystal_chamber.json",
+    "crystal_retrieval": "chapters/crystal_retrieval.json",
     "desperate_route": "chapters/desperate_route.json",
     "elysia_life": "chapters/elysia_life.json",
     "exorcism_route": "chapters/exorcism_route.json",
     "final_choice": "chapters/final_choice.json",
     "forest_deep": "chapters/forest_deep.json",
     "forest_explore": "chapters/forest_explore.json",
+    "hope_awakening": "chapters/hope_awakening.json",
     "main": "chapters/main.json",
     "meet_elysia": "chapters/meet_elysia.json",
     "possession_event": "chapters/possession_event.json",
     "possession_prelude": "chapters/possession_prelude.json",
+    "puppet_contract": "chapters/puppet_contract.json",
     "redemption_route": "chapters/redemption_route.json",
-    "ruins_exploration": "chapters/ruins_exploration.json"
+    "ruins_awakening": "chapters/ruins_awakening.json",
+    "ruins_exploration": "chapters/ruins_exploration.json",
+    "ruins_exploration_bad": "chapters/ruins_exploration_bad.json"
   }
 }

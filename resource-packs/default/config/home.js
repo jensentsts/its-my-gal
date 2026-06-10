@@ -1,0 +1,16 @@
+/**
+ * resource-packs/default/config/home.js
+ *
+ * Auto-converted from home.json
+ */
+export const HOME_CONFIG = {
+  "backgroundUrl": "assets/scenes/home_menu_bg.png",
+  "placeholderGradient": "linear-gradient(135deg, #0e0e14 0%, #030305 100%)",
+  "screenEffect": "snow",
+  "maskEffects": [
+    "vignette",
+    "dim"
+  ],
+  "showOverlay": true,
+  "overlayOpacity": 0.65
+};

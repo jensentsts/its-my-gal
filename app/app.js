@@ -15,7 +15,7 @@
  */
 
 // 静态导入回退数据
-import * as GameData from '../game/index.js';
+import * as GameData from '../resource-packs/default/index.js';
 import { useEngine } from './composables/use-engine.js';
 import { useScale }  from './composables/use-scale.js';
 import { useToast }  from './composables/use-toast.js';
@@ -50,8 +50,8 @@ createApp({
         }
         engineCtx.initEngine(engineInputData);
 
-        // 同步游戏标题到页面 title
-        document.title = engineInputData.GAME_CONFIG?.title || '幻象物语：阿瓦隆之觉醒';
+        // 同步游戏标题到页面 title（从 package/game config 读取）
+        document.title = engineInputData.GAME_CONFIG?.title || 'Galgame';
 
         // ---- 资源包加载状态 ----
         const packLoading = ref(false);

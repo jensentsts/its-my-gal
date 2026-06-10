@@ -1,4 +1,9 @@
-[
+/**
+ * resource-packs/default/chapters/forest_deep.js
+ *
+ * Auto-converted from forest_deep.json
+ */
+export const chapter_forest_deep = [
   {
     "sceneId": "secret_cavern",
     "type": "dialogue",
@@ -89,4 +94,4 @@
       }
     ]
   }
-]
+];

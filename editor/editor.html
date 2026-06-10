@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>剧情树节点编辑器 — 幻象物语：阿瓦隆之觉醒</title>
+    <title>剧情树节点编辑器</title>
 
     <!-- Vue 3 CDN -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
@@ -128,11 +128,11 @@
                                   class="edge-hitarea" />
                             <!-- 可视曲线 -->
                             <path :d="edge.path"
-                                  :stroke="edge.isEnding ? '#c05050' : (edge.active ? '#8acf8a' : '#4a6a4a')"
-                                  :stroke-width="edge.active ? 3 : 2"
+                                  :stroke="selectedEdge?.key === edge.key ? '#ffcc44' : (edge.isEnding ? '#c05050' : (edge.active ? '#8acf8a' : '#4a6a4a'))"
+                                  :stroke-width="selectedEdge?.key === edge.key ? 4 : (edge.active ? 3 : 2)"
                                   fill="none"
-                                  :marker-end="edge.isEnding ? 'url(#arrowHeadEnding)' : (edge.active ? 'url(#arrowHeadActive)' : 'url(#arrowHead)')"
-                                  :style="{ opacity: edge.active ? 1 : 0.75 }"
+                                  :marker-end="selectedEdge?.key === edge.key ? 'url(#arrowHeadActive)' : (edge.isEnding ? 'url(#arrowHeadEnding)' : (edge.active ? 'url(#arrowHeadActive)' : 'url(#arrowHead)'))"
+                                  :style="{ opacity: edge.active || selectedEdge?.key === edge.key ? 1 : 0.75 }"
                                   class="edge-visual" />
                             <!-- 拖拽手柄（箭头端的小圆点，用于重新连接） -->
                             <circle v-if="edge.active"
@@ -164,7 +164,7 @@
                              :style="{
                                  left: node.x + 'px', top: node.y + 'px',
                                  width: (node.width || 200) + 'px',
-                                 minHeight: (node.height || 90) + 'px',
+                                 height: (node.height || 90) + 'px',
                                  background: node.style.bgColor || '',
                                  borderColor: node.style.color || '',
                              }"
@@ -178,25 +178,27 @@
                         <div v-if="node.topPorts && node.topPorts.length > 0" class="node-top-ports">
                             <div v-for="(tp, ti) in node.topPorts" :key="'t'+ti"
                                  class="node-top-port"
-                                 :class="{ 'port-ending': tp.isEnding }"
+                                 :class="{ 'port-ending': tp.isEnding, 'port-multi': tp.multiSource, 'port-unlinked': !tp.fromId }"
                                  :style="{ left: (tp.rpX - 7) + 'px', top: (tp.rpY - 7) + 'px' }"
-                                 :data-tooltip="(tp.isEnding ? '🎬 ' : '← ') + (tp.multiSource ? (tp.sourceCount + ' 个来源') : tp.fromId)"
-                                 @click.stop="selectNode(tp.fromId)"></div>
+                                 :data-tooltip="!tp.fromId ? '⬇ 无入度，可从此处拖入连线' : (tp.isEnding ? '🎬 ' : '← ') + (tp.multiSource ? (tp.sourceCount + ' 个来源') : tp.fromId)"
+                                 @click.stop="tp.fromId ? selectNode(tp.fromId) : null"></div>
                         </div>
-                        <!-- 节点标题 -->
-                        <div class="node-header">
-                            <span class="node-icon">{{ node.style.icon || (node.isEnding ? '🎬' : node.isRoot ? '🏁' : node.isLeaf ? '🏷️' : '📜') }}</span>
-                            <span class="node-title">{{ node.label }}</span>
-                            <span v-if="node.entryPoint" class="entry-badge" title="入口节点">🚪</span>
-                            <span v-if="node.isEnding" class="node-ending-label" title="结局节点">🎬</span>
+                        <!-- 节点内容区（文字在此区域内裁剪，端口在区外不受影响） -->
+                        <div class="node-content">
+                            <div class="node-header">
+                                <span class="node-icon">{{ node.style.icon || (node.isEnding ? '🎬' : node.isRoot ? '🏁' : node.isLeaf ? '🏷️' : '📜') }}</span>
+                                <span class="node-title">{{ node.label }}</span>
+                                <span v-if="node.entryPoint" class="entry-badge" title="入口节点">🚪</span>
+                                <span v-if="node.isEnding" class="node-ending-label" title="结局节点">🎬</span>
+                            </div>
+                            <div class="node-meta">
+                                <span class="node-step-count" v-if="!node.isEnding">{{ node.stepCount }} 步</span>
+                                <span class="node-out-count" v-if="node.outgoing > 0 && !node.isEnding">{{ node.outgoing }} 出口</span>
+                                <span class="node-in-count" v-if="node.incoming > 0">{{ node.incoming }} 入口</span>
+                            </div>
+                            <div class="node-preview" v-if="node.firstText && !node.isEnding">{{ node.firstText }}</div>
+                            <div class="node-description" v-if="node.description && !node.isEnding" :title="node.description">{{ node.description }}</div>
                         </div>
-                        <div class="node-meta">
-                            <span class="node-step-count" v-if="!node.isEnding">{{ node.stepCount }} 步</span>
-                            <span class="node-out-count" v-if="node.outgoing > 0 && !node.isEnding">{{ node.outgoing }} 出口</span>
-                            <span class="node-in-count" v-if="node.incoming > 0">{{ node.incoming }} 入口</span>
-                        </div>
-                        <div class="node-preview" v-if="node.firstText && !node.isEnding">{{ node.firstText }}</div>
-                        <div class="node-description" v-if="node.description && !node.isEnding" :title="node.description">{{ node.description }}</div>
                         <!-- 底部出口端口（圆形，一半被节点遮住，定位在弧线起点） -->
                         <div v-if="node.bottomPorts && node.bottomPorts.length > 0" class="node-bottom-ports">
                             <div v-for="(bp, bi) in node.bottomPorts" :key="'b'+bi"
@@ -358,7 +360,13 @@
                     </div>
                     <div class="form-row">
                         <label>结局 ID</label>
-                        <input type="text" :value="selectedEndingData?.id || selectedEndingNode?.endingId" disabled class="input-disabled" />
+                        <div class="rename-row">
+                            <input type="text" v-model="selectedEndingData._renameId"
+                                   :placeholder="selectedEndingData?.id || selectedEndingNode?.endingId" />
+                            <button class="tb-btn tb-sm" @click="renameResource('endings', selectedEndingData?.id || selectedEndingNode?.endingId)">
+                                ↻ 重命名
+                            </button>
+                        </div>
                     </div>
                     <div class="form-row">
                         <label>结局标题</label>
@@ -419,14 +427,15 @@
                              :class="{
                                  'step-dialogue': step.type === 'dialogue',
                                  'step-choice': step.type === 'choice',
-                                 'step-ending': step.type === 'ending',
+                                 'step-ending': step.type === 'jump' && step.endingId || step.type === 'ending',
                                  'step-jump': step.type === 'jump',
                                  'step-active': editingStepIndex === idx
                              }"
                              @click="selectStep(idx)">
                             <div class="step-card-header">
-                                <span class="step-type-badge" :class="'badge-' + (step.type || 'dialogue')">
-                                    {{ stepTypeLabel(step.type) }}
+                                <span class="step-type-badge"
+                                      :class="step.type === 'ending' || (step.type === 'jump' && step.endingId) ? 'badge-ending' : 'badge-' + (step.type || 'dialogue')">
+                                    {{ stepTypeLabel(step.type, step) }}
                                 </span>
                                 <span class="step-scene" v-if="step.sceneId">{{ step.sceneId }}</span>
                                 <span class="step-char" v-if="step.characterId">👤 {{ getCharName(step.characterId) }}</span>
@@ -455,8 +464,8 @@
                             <select v-model="editingStep.type">
                                 <option value="dialogue">对话 (dialogue)</option>
                                 <option value="choice">分支选择 (choice)</option>
-                                <option value="ending">结局触发 (ending)</option>
                                 <option value="jump">直接跳转 (jump)</option>
+                                <option value="ending">结局触发 (ending)</option>
                             </select>
                         </div>
 
@@ -479,20 +488,6 @@
                             <div class="form-row">
                                 <label>对话文本</label>
                                 <textarea v-model="editingStep.text" rows="4" placeholder="输入对话或叙述文本..."></textarea>
-                            </div>
-                            <div class="form-row">
-                                <label>跳转章节</label>
-                                <select v-model="editingStep.jumpChapter">
-                                    <option value="">(不跳转，继续当前章节)</option>
-                                    <optgroup label="章节">
-                                        <option v-for="(_, cid) in chapters" :key="cid" :value="cid">{{ cid }}</option>
-                                    </optgroup>
-                                    <optgroup label="结局">
-                                        <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">
-                                            🎬 {{ end.title }} ({{ end.id }})
-                                        </option>
-                                    </optgroup>
-                                </select>
                             </div>
                             <div class="form-row">
                                 <label>屏幕特效</label>
@@ -641,37 +636,66 @@
                             </div>
                         </template>
 
-                        <!-- === 结局编辑器 === -->
-                        <template v-if="editingStep.type === 'ending'">
-                            <div class="form-row">
-                                <label>结局</label>
-                                <select v-model="editingStep.endingId">
-                                    <option value="">选择结局...</option>
-                                    <option v-for="end in gameEndings" :key="end.id" :value="end.id">{{ end.title }}</option>
-                                </select>
-                            </div>
-                            <div v-if="selectedEndingPreview" class="ending-preview">
-                                <div class="ending-preview-title">{{ selectedEndingPreview.title }}</div>
-                                <div class="ending-preview-desc">{{ selectedEndingPreview.description }}</div>
-                            </div>
-                        </template>
-
-                        <!-- === 跳转编辑器 === -->
+                        <!--
+                          ===== 跳转编辑器 =====
+                          jump_step 内部可派生出两种行为：
+                            1. 常规跳转 (jumpChapter) → 立即跳转到目标章节
+                            2. 结局触发 (endingId)   → jump_step 的派生（ending_trigger），
+                                                      展示结局描述后触发结局画面
+                        -->
                         <template v-if="editingStep.type === 'jump'">
+                            <!-- jump_step 模式切换：常规跳转 / ending_trigger 派生 -->
+                            <div v-if="!editingStep._jumpMode" data-init-mode>
+                                {{ setDefaultJumpMode(editingStep) }}
+                            </div>
                             <div class="form-row">
-                                <label>目标章节</label>
-                                <select v-model="editingStep.jumpChapter">
-                                    <option value="">选择目标章节...</option>
-                                    <optgroup label="章节">
-                                        <option v-for="(_, cid) in chapters" :key="cid" :value="cid">{{ cid }}</option>
-                                    </optgroup>
-                                    <optgroup label="结局">
-                                        <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">
+                                <label>跳转类型</label>
+                                <div class="jump-mode-toggle">
+                                    <label class="toggle-option" :class="{ active: editingStep._jumpMode === 'chapter' }">
+                                        <input type="radio" value="chapter" v-model="editingStep._jumpMode"
+                                               @change="editingStep.endingId = ''" />
+                                        ⤵ 跳转到章节
+                                    </label>
+                                    <label class="toggle-option" :class="{ active: editingStep._jumpMode === 'ending' }">
+                                        <input type="radio" value="ending" v-model="editingStep._jumpMode"
+                                               @change="editingStep.jumpChapter = ''" />
+                                        🎬 触发结局（带描述展示）
+                                    </label>
+                                </div>
+                            </div>
+                            <!-- 常规跳转：目标章节 -->
+                            <template v-if="editingStep._jumpMode === 'chapter'">
+                                <div class="form-row">
+                                    <label>目标章节</label>
+                                    <select v-model="editingStep.jumpChapter">
+                                        <option value="">选择目标章节...</option>
+                                        <optgroup label="章节">
+                                            <option v-for="(_, cid) in chapters" :key="cid" :value="cid">{{ cid }}</option>
+                                        </optgroup>
+                                        <optgroup label="结局（快捷跳转）">
+                                            <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">
+                                                🎬 {{ end.title }} ({{ end.id }})
+                                            </option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+                            </template>
+                            <!-- 结局触发：选择结局（jump_step 的 ending_trigger 派生） -->
+                            <template v-if="editingStep._jumpMode === 'ending'">
+                                <div class="form-row">
+                                    <label>触发结局</label>
+                                    <select v-model="editingStep.endingId">
+                                        <option value="">选择结局...</option>
+                                        <option v-for="end in gameEndings" :key="end.id" :value="end.id">
                                             🎬 {{ end.title }} ({{ end.id }})
                                         </option>
-                                    </optgroup>
-                                </select>
-                            </div>
+                                    </select>
+                                    <div v-if="editingStep.endingId" class="ending-preview" style="margin-top:6px">
+                                        <div class="ending-preview-title">{{ (gameEndings.find(e => e.id === editingStep.endingId) || {}).title }}</div>
+                                        <div class="ending-preview-desc">{{ (gameEndings.find(e => e.id === editingStep.endingId) || {}).description }}</div>
+                                    </div>
+                                </div>
+                            </template>
                             <div class="form-row">
                                 <label>设置 Flag（可选）</label>
                                 <input type="text" v-model="editingStep.flag" placeholder="flag 名称" />
@@ -694,7 +718,32 @@
                                 </div>
                             </div>
                             <div class="settings-note" style="margin-top:4px">
-                                ⚡ 跳转步骤无对话、无交互，到达后立即执行跳转。适合用作剧情路由。
+                                ⚡ 跳转步骤无对话、无交互，到达后立即执行跳转。适合用作剧情路由。<br>
+                                🎬 "结局触发"是跳转步骤的派生变体：先展示结局描述文本，再触发结局画面。
+                            </div>
+                        </template>
+
+                        <!-- === 结局触发编辑器 === -->
+                        <template v-if="editingStep.type === 'ending'">
+                            <div class="form-row">
+                                <label>触发结局</label>
+                                <select v-model="editingStep.endingId">
+                                    <option value="">选择结局...</option>
+                                    <option v-for="end in gameEndings" :key="end.id" :value="end.id">
+                                        🎬 {{ end.title }} ({{ end.id }})
+                                    </option>
+                                </select>
+                                <div v-if="editingStep.endingId" class="ending-preview" style="margin-top:6px">
+                                    <div class="ending-preview-title">{{ (gameEndings.find(e => e.id === editingStep.endingId) || {}).title }}</div>
+                                    <div class="ending-preview-desc">{{ (gameEndings.find(e => e.id === editingStep.endingId) || {}).description }}</div>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <label>设置 Flag（可选）</label>
+                                <input type="text" v-model="editingStep.flag" placeholder="flag 名称" />
+                            </div>
+                            <div class="settings-note" style="margin-top:4px">
+                                🎬 结局触发步骤：展示结局描述文本后触发结局画面。与跳转步骤不同，此步骤明确标识为结局触发类型。
                             </div>
                         </template>
                     </div>
