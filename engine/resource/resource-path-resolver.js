@@ -4,25 +4,28 @@
  * 资源路径解析器 —— 根据数据结构层级，逐步拼接出完整资源路径。
  *
  * 设计动机：
- *   现有代码中大量重复书写完整路径（如 "assets/characters/elysia/sprites/idle.png"），
+ *   现有代码中大量重复书写完整路径（如 "resource-packs/default/assets/characters/elysia/sprites/idle.png"），
  *   实际上这些路径完全可以根据数据结构（characterId、spriteId、sceneId 等）自动推导。
  *   本模块实现"拼图式"路径构建，统一管理路径约定，并提供资源完整性校验。
  *
- * 路径约定（统一不带前导 /）：
- *   立绘:    assets/characters/{charId}/sprites/{spriteId}.png
- *   头像:    assets/characters/{charId}/avatar.{ext}
- *   场景:    assets/scenes/{sceneId}.{ext}
- *   CG:      assets/cg/{cgId}.{ext}
- *   物品:    assets/items/{itemId}.{ext}
- *   首页背景: assets/scenes/home_menu_bg.png
+ * 路径约定（所有路径从 resource-packs 根目录出发）：
+ *   立绘:    {basePath}/assets/characters/{charId}/sprites/{spriteId}.png
+ *   头像:    {basePath}/assets/characters/{charId}/avatar.{ext}
+ *   场景:    {basePath}/assets/scenes/{sceneId}.{ext}
+ *   CG:      {basePath}/assets/cg/{cgId}.{ext}
+ *   物品:    {basePath}/assets/items/{itemId}.{ext}
+ *   首页背景: {basePath}/assets/scenes/home_menu_bg.png
+ *   默认 basePath: resource-packs/default
  */
 
 export class ResourcePathResolver {
     /**
      * @param {Object} [options]
+     * @param {string}  [options.basePath] 资源包相对路径，默认 'resource-packs/default'
      * @param {string[]} [options.knownExtensions] 尝试检测的扩展名列表
      */
     constructor(options = {}) {
+        this._basePath = (options.basePath || 'resource-packs/default').replace(/\/+$/, '');
         this._knownExtensions = options.knownExtensions || ['png', 'jpg', 'jpeg', 'gif', 'webp'];
     }
 
@@ -30,51 +33,56 @@ export class ResourcePathResolver {
     //  路径构建
     // ================================================================
 
-    /** 立绘路径：assets/characters/{charId}/sprites/{spriteId}.png */
-    sprite(charId, spriteId) {
-        if (!charId || !spriteId) return '';
-        return `assets/characters/${charId}/sprites/${spriteId}.png`;
+    /** @param {string} sub 以 assets/ 开头的子路径 */
+    _full(sub) {
+        return `${this._basePath}/${sub}`;
     }
 
-    /** 头像路径：assets/characters/{charId}/avatar.{ext} */
+    /** 立绘路径：{basePath}/assets/characters/{charId}/sprites/{spriteId}.png */
+    sprite(charId, spriteId) {
+        if (!charId || !spriteId) return '';
+        return this._full(`assets/characters/${charId}/sprites/${spriteId}.png`);
+    }
+
+    /** 头像路径：{basePath}/assets/characters/{charId}/avatar.{ext} */
     avatar(charId, key) {
         if (!charId) return '';
         const name = key || 'normal';
-        // 尝试 .png，不存在时由调用方自行回退
-        return `assets/characters/${charId}/avatar.${name}.png`;
+        return this._full(`assets/characters/${charId}/avatar.${name}.png`);
     }
 
-    /** 场景背景路径：assets/scenes/{sceneId}.{ext} */
+    /** 场景背景路径：{basePath}/assets/scenes/{sceneId}.{ext} */
     scene(sceneId, ext) {
         if (!sceneId) return '';
-        return `assets/scenes/${sceneId}.${ext || 'png'}`;
+        return this._full(`assets/scenes/${sceneId}.${ext || 'png'}`);
     }
 
-    /** CG 路径：assets/cg/{cgId}.{ext} */
+    /** CG 路径：{basePath}/assets/cg/{cgId}.{ext} */
     cg(cgId, ext) {
         if (!cgId) return '';
-        return `assets/cg/${cgId}.${ext || 'png'}`;
+        return this._full(`assets/cg/${cgId}.${ext || 'png'}`);
     }
 
-    /** 物品图片路径：assets/items/{itemId}.{ext} */
+    /** 物品图片路径：{basePath}/assets/items/{itemId}.{ext} */
     item(itemId, ext) {
         if (!itemId) return '';
-        return `assets/items/${itemId}.${ext || 'png'}`;
+        return this._full(`assets/items/${itemId}.${ext || 'png'}`);
     }
 
     /** 首页背景 */
     homeBg() {
-        return 'assets/scenes/home_menu_bg.png';
+        return this._full('assets/scenes/home_menu_bg.png');
     }
 
     // ================================================================
-    //  智能解析：兼容短路径（纯文件名）和完整路径
+    //  智能解析：兼容旧路径（assets/…）和新路径（resource-packs/…）
     // ================================================================
 
     /**
      * 智能解析资源路径。
-     * 如果传入的 path 已经是完整路径（含 /），直接使用（向后兼容）；
-     * 如果是纯文件名，根据类型和 ID 自动构建完整路径。
+     * - 如果 path 为空或纯文件名，由 type + id 自动构建完整路径
+     * - 如果 path 以 assets/ 开头（旧格式），自动补全 basePath
+     * - 其他情况视为完整路径原样返回（向后兼容）
      *
      * @param {string} type  资源类型: 'sprite' | 'avatar' | 'scene' | 'cg' | 'item'
      * @param {string} id    资源主 ID（如 charId、sceneId）
@@ -83,29 +91,27 @@ export class ResourcePathResolver {
      * @returns {string} 规范化后的完整路径
      */
     resolve(type, id, variant, path) {
-        // 如果传入了显式路径且包含斜杠，视为完整路径直接使用
-        if (path && path.includes('/')) {
-            return this._normalize(path);
+        if (!path) {
+            // 空路径 → 按规则构建
+            switch (type) {
+                case 'sprite': return this.sprite(id, variant);
+                case 'avatar': return this.avatar(id, variant || 'normal');
+                case 'scene':  return this.scene(id);
+                case 'cg':     return this.cg(id);
+                case 'item':   return this.item(id);
+                default:       return '';
+            }
         }
-        // 如果是纯文件名或空，按规则构建
-        switch (type) {
-            case 'sprite':
-                return this.sprite(id, variant || path);
-            case 'avatar':
-                return this.avatar(id, variant || 'normal');
-            case 'scene':
-                return this.scene(id, this._extFromPath(path));
-            case 'cg':
-                return this.cg(id, this._extFromPath(path));
-            case 'item':
-                return this.item(id, this._extFromPath(path));
-            default:
-                return path || '';
+        // 以 assets/ 开头 → 旧格式，补全 basePath
+        if (path.startsWith('assets/')) {
+            return this._full(path);
         }
+        // 已有 resource-packs/ 前缀或其它完整路径 → 规范化
+        return this._normalize(path);
     }
 
     /** 从文件名推测扩展名 */
-    _extFromPath(path) {
+    _extFromPath(path) { // kept for compat, used in validateAll
         if (!path) return 'png';
         const m = path.match(/\.(\w+)$/);
         return m ? m[1] : 'png';

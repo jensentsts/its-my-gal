@@ -4,7 +4,7 @@
  * Auto-converted from home.json
  */
 export const HOME_CONFIG = {
-  "backgroundUrl": "assets/scenes/home_menu_bg.png",
+  "backgroundUrl": "resource-packs/default/assets/scenes/home_menu_bg.png",
   "placeholderGradient": "linear-gradient(135deg, #0e0e14 0%, #030305 100%)",
   "screenEffect": "snow",
   "maskEffects": [

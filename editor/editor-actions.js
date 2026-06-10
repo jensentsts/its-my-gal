@@ -1079,7 +1079,7 @@ export function useEditorActions(s, c, deps) {
                     if (item.avatars) for (const av of Object.values(item.avatars)) {
                         if (av) urls.add(av);
                     }
-                    if (item._blob && item._fileName) assetBlobs.push({ path: 'assets/' + item._fileName, blob: item._blob, name: item._fileName });
+                    if (item._blob && item._fileName) assetBlobs.push({ path: 'resource-packs/default/assets/' + item._fileName, blob: item._blob, name: item._fileName });
                 }
                 return urls;
             };
@@ -1119,7 +1119,11 @@ export function useEditorActions(s, c, deps) {
             }
             for (const asset of assetBlobs) {
                 if (asset.blob) {
-                    const assetPath = 'assets/' + (asset.name || asset.path.split('/').pop());
+                    // 使用配置中的完整路径（resource-packs/default/assets/...）
+                    // 若 path 是 blob URL 则回退到 resource-packs/default/assets/ + 文件名
+                    const assetPath = (asset.path && !asset.path.startsWith('blob:'))
+                        ? asset.path.replace(/^\/+/, '')
+                        : 'resource-packs/default/assets/' + (asset.name || 'unknown');
                     folder.file(assetPath, asset.blob);
                 }
             }
