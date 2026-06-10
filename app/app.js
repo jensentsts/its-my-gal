@@ -24,7 +24,7 @@ import { getDynamicItemDescription as getDynamicDesc, getItemIcon, getItemImage,
 const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
 
 // ── 版本信息 ──
-const ENGINE_VERSION = '0.1.0';
+const ENGINE_VERSION = '0.1.1';
 const STORY_VERSION  = '1.0.0';
 
 createApp({
@@ -532,6 +532,8 @@ createApp({
             return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable === 'true';
         }
 
+        let _lastSpaceAdvance = 0;
+
         function onGlobalKeyDown(e) {
             const ctrl = e.ctrlKey || e.metaKey;
             const key = e.key;
@@ -546,6 +548,7 @@ createApp({
             // ESC
             if (key === 'Escape') {
                 if (engineCtx.lightboxUrl.value) { closeLightbox(); e.preventDefault(); return; }
+                if (showInfoPanel.value) { closeInfoPanel(); e.preventDefault(); return; }
                 if (engineCtx.showInventory.value) { engineCtx.showInventory.value = false; e.preventDefault(); return; }
                 if (engineCtx.dialogState.show) { engineCtx.closeDialog(null); e.preventDefault(); return; }
                 if (engineCtx.activeGamePanel.value) { engineCtx.activeGamePanel.value = null; e.preventDefault(); return; }
@@ -554,9 +557,13 @@ createApp({
                 return;
             }
 
-            // Space（非输入区域）→ 推进剧情
+            // Space（非输入区域）→ 关闭物品提示 / 推进剧情（长按节流50ms）
             if (key === ' ' && inGame) {
                 e.preventDefault();
+                if (engineCtx.stageDisplayItem.value) { engineCtx.dismissItemStageToast(); return; }
+                const now = Date.now();
+                if (now - _lastSpaceAdvance < 50) return;
+                _lastSpaceAdvance = now;
                 globalAdvance();
                 return;
             }
@@ -612,6 +619,12 @@ createApp({
             }
         }
 
+        function onBeforeUnload() {
+            if (engineCtx.currentView.value === 'game') {
+                engineCtx.saveExitState();
+            }
+        }
+
         // ================================================================
         //  生命周期
         // ================================================================
@@ -620,6 +633,7 @@ createApp({
             window.addEventListener('resize', onResize);
             window.addEventListener('orientationchange', onOrientationChange);
             document.addEventListener('keydown', onGlobalKeyDown);
+            window.addEventListener('beforeunload', onBeforeUnload);
             if (window.matchMedia) {
                 const mq = window.matchMedia('(orientation: portrait)');
                 if (mq.addEventListener) mq.addEventListener('change', onOrientationChange);
@@ -631,6 +645,7 @@ createApp({
         onUnmounted(() => {
             cleanupScale();
             document.removeEventListener('keydown', onGlobalKeyDown);
+            window.removeEventListener('beforeunload', onBeforeUnload);
             engineCtx.destroy();
         });
 
