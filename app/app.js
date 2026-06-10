@@ -232,27 +232,43 @@ createApp({
         }
 
         function executeSlotSave(slotId) {
-            const now = new Date();
-            const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            try {
+                const now = new Date();
+                const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-            const step = currentStep.value;
-            let bgRender = '#111';
-            let sceneUrl = null;
-            if (step?.sceneId) {
-                const sc = resolveData('SCENES')[step.sceneId];
-                if (sc) { bgRender = sc.bgPlaceholder || '#111'; sceneUrl = sc.url || null; }
+                const step = currentStep.value;
+                let bgRender = '#111';
+                let sceneUrl = null;
+                if (step?.sceneId) {
+                    const sc = resolveData('SCENES')[step.sceneId];
+                    if (sc) { bgRender = sc.bgPlaceholder || '#111'; sceneUrl = sc.url || null; }
+                }
+
+                // 安全截断文本：防止超长文本导致存档数据过大
+                let textBrief = '分支选择中';
+                try {
+                    if (step?.text) {
+                        textBrief = String(step.text).substring(0, 14) + '...';
+                    } else if (step?.type === 'choice') {
+                        textBrief = '分支选择中';
+                    }
+                } catch (e) { /* ignore */ }
+
+                const ok = engineCtx.saveGame(slotId, {
+                    bgRenderStyle: bgRender,
+                    sceneBgUrl: sceneUrl,
+                    cgUrl: engineCtx.activeCG.value?.url || null,
+                    textBrief,
+                    speaker: currentSpeakerName.value || null,
+                    saveTime: timeStr,
+                });
+
+                if (ok) toast.show(`时空节点 SLOT-${slotId} 保存成功！`);
+                else toast.show('存档失败，请查看控制台日志', 'info');
+            } catch (e) {
+                console.error('[App] executeSlotSave 异常:', e);
+                toast.show('存档异常: ' + e.message, 'info');
             }
-
-            const ok = engineCtx.saveGame(slotId, {
-                bgRenderStyle: bgRender,
-                sceneBgUrl: sceneUrl,
-                cgUrl: engineCtx.activeCG.value?.url || null,
-                textBrief: step?.text ? step.text.substring(0, 14) + '...' : '分支选择中',
-                speaker: currentSpeakerName.value || null,
-                saveTime: timeStr,
-            });
-
-            if (ok) toast.show(`时空节点 SLOT-${slotId} 保存成功！`);
         }
 
         function executeSlotLoad(slotId) {
@@ -277,12 +293,27 @@ createApp({
         }
 
         function safelyExitToMenu() {
+            engineCtx.saveExitState(); // 保存退出暂存
             engineCtx.clearGameEffects();
             engineCtx.currentView.value = 'menu';
             engineCtx.activeGamePanel.value = null;
             engineCtx.activeMenuPanel.value = null;
             engineCtx.loadSaveSlots();
             engineCtx.initHomeEffects(resolveData('HOME_CONFIG'));
+        }
+
+        function continueFromExit() {
+            const ok = engineCtx.loadExitState();
+            if (ok) {
+                engineCtx.currentView.value = 'game';
+                engineCtx.activeGamePanel.value = null;
+                engineCtx.activeMenuPanel.value = null;
+                engineCtx.uiVisible.value = true;
+                nextTick(() => {
+                    engineCtx.updateSceneBgTest();
+                    updateScale();
+                });
+            }
         }
 
         function globalAdvance() {
@@ -356,8 +387,49 @@ createApp({
             }
         }
 
-        function openLightbox(url) { if (url) engineCtx.lightboxUrl.value = url; }
-        function closeLightbox() { engineCtx.lightboxUrl.value = ''; }
+        function openLightbox(url) { if (url) { engineCtx.lightboxUrl.value = url; engineCtx.lightboxError.value = false; } }
+        function closeLightbox() { engineCtx.lightboxUrl.value = ''; engineCtx.lightboxError.value = false; }
+        function onLightboxError() { engineCtx.lightboxError.value = true; }
+
+        // ── 清除记忆长按按钮 ──
+        const CLEAR_HOLD_MS = 3000;
+        const clearProgress = Vue.ref(0);
+        const clearHolding = Vue.ref(false);
+        let clearHoldTimer = null;
+        let clearHoldStart = 0;
+        let clearAnimFrame = null;
+
+        function startClearHold() {
+            if (clearHolding.value) return;
+            clearHolding.value = true;
+            clearProgress.value = 0;
+            clearHoldStart = Date.now();
+            clearHoldTimer = setInterval(() => {
+                const elapsed = Date.now() - clearHoldStart;
+                clearProgress.value = Math.min(100, (elapsed / CLEAR_HOLD_MS) * 100);
+                if (elapsed >= CLEAR_HOLD_MS) {
+                    cancelClearHold();
+                    // 长按完成 → 弹出确认
+                    engineCtx.showDialog({
+                        type: 'confirm',
+                        title: '清除所有记忆',
+                        message: '确定要清除所有画廊解锁、结局记录、章节进度和存档吗？\n\n此操作不可撤销。',
+                        confirmText: '确认清除',
+                        cancelText: '取消',
+                    }).then(result => {
+                        if (result === true) {
+                            engineCtx.clearAllMemories();
+                        }
+                    });
+                }
+            }, 30);
+        }
+
+        function cancelClearHold() {
+            if (clearHoldTimer) { clearInterval(clearHoldTimer); clearHoldTimer = null; }
+            clearHolding.value = false;
+            clearProgress.value = 0;
+        }
 
         function openInventoryPanel() {
             engineCtx.showInventory.value = true;
@@ -383,12 +455,119 @@ createApp({
         }
 
         function handleSpriteError(charId) {
+            // 清除引擎中的角色精灵 URL，触发 UI 兜底占位图
+            const eng = engineCtx.engine.value;
+            if (eng && eng.state && eng.state.stageCharacters && eng.state.stageCharacters[charId]) {
+                eng.state.stageCharacters[charId] = {
+                    ...eng.state.stageCharacters[charId],
+                    url: ''
+                };
+            }
+            // 同时更新 Vue 响应式状态
             const s = engineCtx.stageCharacters.value;
-            if (s[charId]) s[charId].url = '';
+            if (s[charId]) {
+                s[charId] = { ...s[charId], url: '' };
+            }
         }
 
         function onSceneBgError() {
             engineCtx.onSceneBgError();
+        }
+
+        function onCGError() {
+            // CG 图片加载失败 → 清除 activeCG，触发 fallback 或让 UI 显示占位
+            const eng = engineCtx.engine.value;
+            if (eng && eng.state && eng.state.activeCG) {
+                eng.state.activeCG = { ...eng.state.activeCG, url: '' };
+            }
+            engineCtx.activeCG.value = null;
+        }
+
+        // ── 全局键盘快捷键 ──
+        function isInputFocused() {
+            const tag = document.activeElement?.tagName || '';
+            const editable = document.activeElement?.getAttribute('contenteditable');
+            return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable === 'true';
+        }
+
+        function onGlobalKeyDown(e) {
+            const ctrl = e.ctrlKey || e.metaKey;
+            const key = e.key;
+            const inGame = engineCtx.currentView.value === 'game';
+
+            // 输入框中不响应快捷键
+            if (isInputFocused()) {
+                // 但 ESC 和 Space 仍然在输入框外处理
+                if (key === 'Escape' || key === ' ') return;
+            }
+
+            // ESC
+            if (key === 'Escape') {
+                if (engineCtx.lightboxUrl.value) { closeLightbox(); e.preventDefault(); return; }
+                if (engineCtx.showInventory.value) { engineCtx.showInventory.value = false; e.preventDefault(); return; }
+                if (engineCtx.dialogState.show) { engineCtx.closeDialog(null); e.preventDefault(); return; }
+                if (engineCtx.activeGamePanel.value) { engineCtx.activeGamePanel.value = null; e.preventDefault(); return; }
+                if (engineCtx.activeMenuPanel.value) { engineCtx.activeMenuPanel.value = null; e.preventDefault(); return; }
+                if (engineCtx.stageDisplayItem.value) { engineCtx.dismissItemStageToast(); e.preventDefault(); return; }
+                return;
+            }
+
+            // Space（非输入区域）→ 推进剧情
+            if (key === ' ' && inGame) {
+                e.preventDefault();
+                globalAdvance();
+                return;
+            }
+
+            if (!ctrl) return;
+
+            // Ctrl+S → 快速存档
+            if (key === 's') {
+                e.preventDefault();
+                if (inGame) {
+                    // 找到第一个空槽位，或覆盖最旧的槽位
+                    const slots = engineCtx.saveSlotsData.value;
+                    let targetSlot = null;
+                    for (let i = 1; i <= 16; i++) {
+                        if (!slots[i]) { targetSlot = i; break; }
+                    }
+                    if (!targetSlot) targetSlot = 1; // 全满时覆盖第一格
+                    const meta = {
+                        chapterId: engineCtx.currentChapterId.value,
+                        stepIndex: engineCtx.currentStepIndex.value,
+                    };
+                    engineCtx.saveGame(targetSlot, meta);
+                    engineCtx.showDialog({
+                        type: 'alert',
+                        title: '快速存档',
+                        message: `已保存至 SLOT ${String(targetSlot).padStart(2, '0')}`,
+                        confirmText: '确定',
+                    });
+                }
+                return;
+            }
+
+            // Ctrl+O → 快速读档
+            if (key === 'o') {
+                e.preventDefault();
+                if (inGame) {
+                    engineCtx.openArchiveSlotsPanel('load');
+                    engineCtx.activeGamePanel.value = 'archiveSlots';
+                } else {
+                    engineCtx.openArchiveSlotsPanel('load');
+                    engineCtx.activeMenuPanel.value = 'archiveSlots';
+                }
+                return;
+            }
+
+            // Ctrl+N → 新开游戏（主界面）
+            if (key === 'n' && !inGame) {
+                e.preventDefault();
+                if (engineCtx.currentView.value === 'menu') {
+                    startNewGame();
+                }
+                return;
+            }
         }
 
         // ================================================================
@@ -398,6 +577,7 @@ createApp({
             updateScale();
             window.addEventListener('resize', onResize);
             window.addEventListener('orientationchange', onOrientationChange);
+            document.addEventListener('keydown', onGlobalKeyDown);
             if (window.matchMedia) {
                 const mq = window.matchMedia('(orientation: portrait)');
                 if (mq.addEventListener) mq.addEventListener('change', onOrientationChange);
@@ -408,6 +588,7 @@ createApp({
 
         onUnmounted(() => {
             cleanupScale();
+            document.removeEventListener('keydown', onGlobalKeyDown);
             engineCtx.destroy();
         });
 
@@ -436,8 +617,9 @@ createApp({
             assetsCharacters: computed(() => resolveData('CHARACTERS')),
             assetsCgLibrary: computed(() => resolveData('CG_LIBRARY')),
             fullEndingsList: computed(() => resolveData('ENDINGS')),
+            chapterDescriptions: computed(() => resolveData('CHAPTER_DESCRIPTIONS')),
             // 方法（保持与原模板同名）
-            startNewGame, advanceStory, selectChoice, rollbackToTimeline,
+            startNewGame, continueFromExit, advanceStory, selectChoice, rollbackToTimeline,
             exitToMenu, safelyExitToMenu, openCharactersPanel, switchInspectedCharacter,
             switchInspectedSprite, handleArchiveSpriteError,
             openArchiveSlotsPanel, executeSlotSave, executeSlotLoad, executeSlotClear,
@@ -445,7 +627,9 @@ createApp({
             getCharName, getCharColor, getCharMeta, getCharEmoji, hexToRgb,
             queryItemIcon, queryItemImage, queryItemName,
             openInventoryPanel, selectItemForInspection,
-            globalAdvance, dismissItemStageToast, onSceneBgError,
+            globalAdvance, dismissItemStageToast, onSceneBgError, onCGError, onLightboxError,
+            // 清除记忆
+            clearProgress, clearHolding, startClearHold, cancelClearHold,
         };
     }
 }).mount('#app');

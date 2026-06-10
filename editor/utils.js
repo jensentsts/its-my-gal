@@ -83,12 +83,15 @@ export function getCharSprites(gameCharacters, charId) {
 export function stepTextBrief(step) {
     if (!step) return '';
     if (step.type === 'choice') return `[分支] ${(step.text || '').substring(0, 40)}...`;
+    if (step.type === 'ending') return `[结局触发] → ${step.endingId || '(未选择结局)'}`;
     if (step.type === 'jump') {
         if (step.endingId) return `[结局触发] → ${step.endingId}`;
         return `[跳转] → ${step.jumpChapter || '(无目标)'}`;
     }
-    if (step.text) return step.text.substring(0, 50) + (step.text.length > 50 ? '...' : '');
-    return '(空对话)';
+    const previewText = step.texts && step.texts.length
+        ? step.texts[0]
+        : (step.text || '');
+    return previewText.substring(0, 50) + (previewText.length > 50 ? '...' : '');
 }
 
 /** 步骤类型标签 */

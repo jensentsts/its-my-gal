@@ -44,20 +44,7 @@ gal_game/
 │   │   ├── items.js       #   物品配置 + 动画预设
 │   │   ├── cg-library.js  #   CG 图鉴库
 │   │   └── endings.js     #   结局定义
-│   └── chapters/          #   故事章节（13个）
-│       ├── prologue.js    #      序章：迷雾之邀
-│       ├── meet-elysia.js #      初遇：森林守护者
-│       ├── forest-explore.js #   探索：幽暗林道
-│       ├── ruins-exploration.js # 遗迹：远古之秘
-│       ├── forest-deep.js #      深入：迷雾核心
-│       ├── possession-prelude.js # 附身前奏
-│       ├── possession-event.js #  附身事件
-│       ├── body-explore.js #     身体探索
-│       ├── elysia-life.js #      爱莉希雅的生活
-│       ├── final-choice.js #     终局抉择
-│       ├── redemption-route.js # 救赎路线
-│       ├── exorcism-route.js #   驱魔路线
-│       └── desperate-route.js #  绝望路线
+│   └── chapters/          #   故事章节
 ├── app/                   # UI 表现层 (Vue 3)
 │   ├── app.js             #   Vue 应用入口
 │   ├── composables/

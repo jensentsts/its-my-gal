@@ -1,23 +1,23 @@
 /**
  * resource-packs/default/chapters/final_choice.js
  *
- * Auto-converted from final_choice.json
+ * 最终抉择 —— 使用 texts 批处理优化。
  */
 export const chapter_final_choice = [
   {
     "sceneId": "ancient_altar",
     "type": "dialogue",
     "characterId": "player",
-    "text": "回到祭坛的时候，天色已经完全暗了下来。厚重的云层遮住了月亮，只有护身符的绿光照亮了一小片区域。安文的身体还静静地躺在石凹中，胸口缓缓起伏。我蹲下来看着那张熟悉的、却又显得陌生的面孔——二十四年来我每天在镜子里看到的那张脸，此刻从外部看，格外不真实。",
-    "screenEffect": "bloodmoon?density=15",
-    "effects": ["dim"]
-  },
-  {
-    "sceneId": "ancient_altar",
-    "type": "dialogue",
-    "characterId": "player",
-    "text": "瓦尔加斯在我意识深处蠢蠢欲动。我能感觉到他在积蓄力量，试图重新夺取对这具身体的控制权。而爱莉希雅的灵魂仍然安静地沉在最底层——但如果我的判断没错，通过护身符的力量，我有办法唤醒她。问题是，这需要我继续留在这具身体里，与瓦尔加斯的意识对抗。而另一边，回到自己的身体、用人类的身份去对抗他……胜算更低。",
-    "effects": ["screenShake"]
+    "texts": [
+      "回到祭坛的时候，天色已经完全暗了下来。厚重的云层遮住了月亮，只有护身符的绿光照亮了一小片区域。安文的身体还静静地躺在石凹中，胸口缓缓起伏。我蹲下来看着那张熟悉的、却又显得陌生的面孔——二十四年来我每天在镜子里看到的那张脸，此刻从外部看，格外不真实。",
+      "瓦尔加斯在我意识深处蠢蠢欲动。我能感觉到他在积蓄力量，试图重新夺取对这具身体的控制权。而爱莉希雅的灵魂仍然安静地沉在最底层——但如果我的判断没错，通过护身符的力量，我有办法唤醒她。问题是，这需要我继续留在这具身体里，与瓦尔加斯的意识对抗。而另一边，回到自己的身体、用人类的身份去对抗他……胜算更低。"
+    ],
+    "textEffects": [
+      null,
+      {"effects": ["screenShake"]}
+    ],
+    "effects": ["dim"],
+    "screenEffect": "bloodmoon?density=15"
   },
   {
     "sceneId": "ancient_altar",
@@ -31,17 +31,16 @@ export const chapter_final_choice = [
     "sceneId": "ancient_altar",
     "type": "dialogue",
     "characterId": "player",
-    "text": "但还有一件事一直在我脑海中挥之不去——在遗迹的壁画上，我看到了远古精灵们封印瓦尔加斯的完整场景。如果我没有理解错的话，壁画中那位手持护身符的人类祖先所念诵的祷文，并不仅仅是普通的封印咒语——它是一种更加古老的、能够从根源上瓦解黑暗力量的'源初之言'。",
+    "texts": [
+      "但还有一件事一直在我脑海中挥之不去——在遗迹的壁画上，我看到了远古精灵们封印瓦尔加斯的完整场景。如果我没有理解错的话，壁画中那位手持护身符的人类祖先所念诵的祷文，并不仅仅是普通的封印咒语——它是一种更加古老的、能够从根源上瓦解黑暗力量的'源初之言'。",
+      "壁画上的每一个符文、每一个手势都清晰地印在我的脑海中。那是一种超越语言的力量——古精灵语的元初形态，据称是森林本身在人类诞生之前就拥有的声音。如果我能用爱莉希雅的身体——这具流淌着纯净精灵魔力的躯体——来吟诵那段祷文，配合护身符的力量，或许可以从根源上瓦解瓦尔加斯的整个存在基础。"
+    ],
+    "textEffects": [
+      null,
+      {"effects": ["dim"], "screenEffect": "stardust?density=35"}
+    ],
     "effects": ["flashWhite"],
     "screenEffect": "stardust?density=30"
-  },
-  {
-    "sceneId": "ancient_altar",
-    "type": "dialogue",
-    "characterId": "player",
-    "text": "壁画上的每一个符文、每一个手势都清晰地印在我的脑海中。那是一种超越语言的力量——古精灵语的元初形态，据称是森林本身在人类诞生之前就拥有的声音。如果我能用爱莉希雅的身体——这具流淌着纯净精灵魔力的躯体——来吟诵那段祷文，配合护身符的力量，或许可以从根源上瓦解瓦尔加斯的整个存在基础。",
-    "effects": ["dim"],
-    "screenEffect": "stardust?density=35"
   },
   {
     "sceneId": "ancient_altar",

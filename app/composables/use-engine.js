@@ -59,6 +59,50 @@ export function useEngine() {
     const uiVisible              = Vue.ref(true);
     const unlockedGalleries      = Vue.ref({});
     const unlockedEndings        = Vue.ref({});
+    const visitedChapters        = Vue.ref({});
+    const hasExitSave            = Vue.ref(false); // 是否有退出暂存
+
+    // ---- 自定义对话框状态 ----
+    const dialogState = Vue.reactive({
+        show: false,
+        type: 'alert',       // 'alert' | 'confirm' | 'prompt'
+        title: '',
+        message: '',
+        confirmText: '确定',
+        cancelText: '取消',
+        promptPlaceholder: '',
+        promptValue: '',
+        confirmDisabled: false,
+        cancelDisabled: false,
+        resolve: null,       // 回调函数
+    });
+
+    function showDialog(opts) {
+        // 关闭之前的对话框
+        if (dialogState.resolve) dialogState.resolve(null);
+        dialogState.show = true;
+        dialogState.type = opts.type || 'alert';
+        dialogState.title = opts.title || '';
+        dialogState.message = opts.message || '';
+        dialogState.confirmText = opts.confirmText || (opts.type === 'alert' ? '确定' : '确定');
+        dialogState.cancelText = opts.cancelText || '取消';
+        dialogState.promptPlaceholder = opts.promptPlaceholder || '';
+        dialogState.promptValue = opts.promptValue || '';
+        dialogState.confirmDisabled = opts.confirmDisabled || false;
+        dialogState.cancelDisabled = opts.cancelDisabled || false;
+        return new Promise((resolve) => {
+            dialogState.resolve = resolve;
+        });
+    }
+
+    function closeDialog(result) {
+        dialogState.show = false;
+        if (dialogState.resolve) {
+            dialogState.resolve(result);
+            dialogState.resolve = null;
+        }
+        dialogState.promptValue = '';
+    }
 
     // 游戏内状态
     const currentChapterId       = Vue.ref('main');
@@ -94,6 +138,7 @@ export function useEngine() {
     const activeSpriteIdForInspection = Vue.ref(null);
     const activeInspectedSpriteUrl  = Vue.ref('');
     const lightboxUrl              = Vue.ref('');
+    const lightboxError            = Vue.ref(false);
 
     // ---- 从编辑器 localStorage 加载同步数据 ----
     function loadEditorData() {
@@ -335,6 +380,7 @@ export function useEngine() {
             triggeredEnding.value = ending;
             eng.saveManager.unlockEnding(ending.id);
             unlockedEndings.value = eng.saveManager.getEndings();
+            clearExitSave(); // 触发结局后清除退出暂存，主菜单不再显示"继续游戏"
         });
 
         eng.on('history:push', (log) => {
@@ -345,9 +391,13 @@ export function useEngine() {
             typingFinished.value = true;
         });
 
-        // ---- 章节变更 → 预判 + 预加载 ----
+        // ---- 章节变更 → 预判 + 预加载 + 访问记录 ----
         eng.on('chapter:change', ({ from, to }) => {
             _preloadOnChapterChange(to);
+            if (to && !to.startsWith('_end_')) {
+                eng.saveManager.visitChapter(to);
+                visitedChapters.value = eng.saveManager.getVisitedChapters();
+            }
         });
     }
 
@@ -508,6 +558,7 @@ export function useEngine() {
         selectedBagItemId.value = null;
         triggeredEnding.value = null;
         sceneBgFailed.value = false;
+        clearExitSave();
 
         const entryChapterId = getEntryChapterId();
         engine.value?.start(entryChapterId, 0);
@@ -562,37 +613,57 @@ export function useEngine() {
     }
 
     function saveGame(slotId, meta) {
-        const ok = engine.value?.save(slotId, meta);
-        if (ok) saveSlotsData.value = engine.value.getSaveSlots();
-        return ok;
+        try {
+            const eng = engine.value;
+            if (!eng) return false;
+            const ok = eng.save(slotId, meta);
+            if (ok) {
+                try {
+                    saveSlotsData.value = eng.getSaveSlots();
+                } catch (e) {
+                    console.warn('[useEngine] 刷新存档列表失败:', e.message);
+                }
+            }
+            return ok;
+        } catch (e) {
+            console.error('[useEngine] saveGame 异常:', e.message);
+            return false;
+        }
     }
 
     function loadGame(slotId) {
-        if (homeFxManager) { homeFxManager.clear(); homeFxManager = null; }
-        itemToastQueue.value = [];
-        isShowingItemToast.value = false;
-        stageDisplayItem.value = null;
-        triggeredEnding.value = null;
-        sceneBgFailed.value = false;
+        try {
+            if (homeFxManager) { homeFxManager.clear(); homeFxManager = null; }
+            itemToastQueue.value = [];
+            isShowingItemToast.value = false;
+            stageDisplayItem.value = null;
+            triggeredEnding.value = null;
+            sceneBgFailed.value = false;
 
-        const ok = engine.value?.load(slotId);
-        if (ok) {
-            syncState();
-            currentView.value = 'game';
-            activeGamePanel.value = null;
-            activeMenuPanel.value = null;
-            uiVisible.value = true;
+            const eng = engine.value;
+            if (!eng) return false;
+            const ok = eng.load(slotId);
+            if (ok) {
+                syncState();
+                currentView.value = 'game';
+                activeGamePanel.value = null;
+                activeMenuPanel.value = null;
+                uiVisible.value = true;
 
-            // 读档后重新触发预判预加载
-            _lastTrackedChapterId = null;
-            _preloadOnChapterChange(currentChapterId.value);
+                // 读档后重新触发预判预加载
+                _lastTrackedChapterId = null;
+                _preloadOnChapterChange(currentChapterId.value);
 
-            Vue.nextTick(() => {
-                initGameEffects();
-                updateSceneBgTest();
-            });
+                Vue.nextTick(() => {
+                    initGameEffects();
+                    updateSceneBgTest();
+                });
+            }
+            return ok;
+        } catch (e) {
+            console.error('[useEngine] loadGame 异常:', e.message);
+            return false;
         }
-        return ok;
     }
 
     function clearSaveSlot(slotId) {
@@ -606,6 +677,100 @@ export function useEngine() {
             saveSlotsData.value = engine.value.getSaveSlots();
             unlockedGalleries.value = engine.value.saveManager.getGallery();
             unlockedEndings.value = engine.value.saveManager.getEndings();
+            visitedChapters.value = engine.value.saveManager.getVisitedChapters();
+        }
+        checkExitSave();
+    }
+
+    // ---- 退出暂存（exit save） ----
+    const EXIT_SAVE_KEY = 'gal_exit_save';
+
+    /** 保存退出暂存 */
+    function saveExitState() {
+        const eng = engine.value;
+        if (!eng) return false;
+        try {
+            const snap = eng.state.snapshot();
+            const meta = {
+                saveTime: new Date().toLocaleString(),
+                chapterId: eng.state.currentChapterId,
+                stepIndex: eng.state.currentStepIndex,
+                savedAt: Date.now(),
+            };
+            const data = { snap, meta };
+            localStorage.setItem(EXIT_SAVE_KEY, JSON.stringify(data));
+            hasExitSave.value = true;
+            return true;
+        } catch (e) {
+            console.error('[ExitSave] 暂存失败:', e);
+            return false;
+        }
+    }
+
+    /** 加载退出暂存 */
+    function loadExitState() {
+        const eng = engine.value;
+        if (!eng) return false;
+        try {
+            const raw = localStorage.getItem(EXIT_SAVE_KEY);
+            if (!raw) return false;
+            const data = JSON.parse(raw);
+            if (!data.snap) return false;
+            eng.state.restore(data.snap);
+            eng.emit('chapter:change', {
+                from: null,
+                to: eng.state.currentChapterId || 'main',
+                stepIndex: eng.state.currentStepIndex ?? 0,
+            });
+            syncState();
+            return true;
+        } catch (e) {
+            console.error('[ExitSave] 加载暂存失败:', e);
+            return false;
+        }
+    }
+
+    /** 检查是否存在退出暂存 */
+    function checkExitSave() {
+        try {
+            const raw = localStorage.getItem(EXIT_SAVE_KEY);
+            hasExitSave.value = !!raw;
+        } catch {
+            hasExitSave.value = false;
+        }
+    }
+
+    /** 清除退出暂存 */
+    function clearExitSave() {
+        try { localStorage.removeItem(EXIT_SAVE_KEY); } catch {}
+        hasExitSave.value = false;
+    }
+
+    /** 清除所有存储的记忆（画廊、结局、章节、存档） */
+    function clearAllMemories() {
+        const sm = engine.value?.saveManager;
+        if (!sm) return;
+        try {
+            // 清除所有 localStorage 中本游戏的数据
+            const keys = [
+                sm._slotKey,
+                sm._galleryKey,
+                sm._endingsKey,
+                sm._chaptersKey,
+                EXIT_SAVE_KEY,
+            ];
+            for (const k of keys) {
+                try { localStorage.removeItem(k); } catch {}
+            }
+            // 刷新状态
+            loadSaveSlots();
+            unlockedGalleries.value = {};
+            unlockedEndings.value = {};
+            visitedChapters.value = {};
+            return true;
+        } catch (e) {
+            console.error('[ClearMemories] 清除失败:', e);
+            return false;
         }
     }
 
@@ -690,21 +855,23 @@ export function useEngine() {
         preloadStats,
         // 响应式状态
         currentView, activeMenuPanel, activeGamePanel, archiveMode, saveSlotsData, uiVisible,
-        unlockedGalleries, unlockedEndings,
+        unlockedGalleries, unlockedEndings, visitedChapters, hasExitSave,
         currentChapterId, currentStepIndex, gameState, stageCharacters, historyLogs, lastSpeakerId,
         activeCG, activeEffects, currentScreenEffect, triggeredEnding,
         typedText, typingFinished, avatarLoadFail,
         stageDisplayItem, itemToastQueue, isShowingItemToast, selectedBagItemId,
         sceneBgFailed, currentSceneTestUrl,
         showLog, showInventory,
-        activeInspectedCharId, activeSpriteIdForInspection, activeInspectedSpriteUrl, lightboxUrl,
+        activeInspectedCharId, activeSpriteIdForInspection, activeInspectedSpriteUrl, lightboxUrl, lightboxError,
+        dialogState, showDialog, closeDialog,
         // 方法
         initEngine, loadEditorData, loadPackFromPath, importPackFromZip,
         getPackMeta, isPackLoaded,
         exportCurrentAsPack, exportCurrentAsZip,
         syncState, syncInventory,
         startNewGame, advanceStory, selectChoice, rollbackToTimeline,
-        saveGame, loadGame, clearSaveSlot, loadSaveSlots,
+        saveGame, loadGame, clearSaveSlot, loadSaveSlots, clearAllMemories,
+        saveExitState, loadExitState, checkExitSave, clearExitSave,
         initGameEffects, initHomeEffects, clearGameEffects,
         updateSceneBgTest, onSceneBgError,
         enqueueItemToast, processItemToastQueue, dismissItemStageToast,

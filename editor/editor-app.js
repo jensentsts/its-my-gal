@@ -13,6 +13,7 @@
 
 import * as GameData from '../resource-packs/default/index.js';
 import { ResourceManager, validatePackStructure, validatePackData, EffectsManager } from '../engine/index.js';
+import { analyzeTree, computeLayout, computeEndingLayout, computeEdgePath } from './tree-layout.js';
 
 const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
@@ -31,315 +32,11 @@ function uid(prefix = 'c') {
 }
 
 // ════════════════════════════════════════════════════════════════════
-//  树结构分析
+//  树结构分析 / 自动布局 —— 从 tree-layout.js 导入
 // ════════════════════════════════════════════════════════════════════
 
-/**
- * 从章节数据中提取树结构
- * @returns {{ adjacency: Object, incoming: Object, roots: string[], leaves: string[] }}
- */
-function analyzeTree(chapters) {
-    const adjacency = {};   // chapterId → [targetChapterIds]
-    const incoming = {};    // chapterId → count (被多少章节引用)
-
-    for (const [cid, steps] of Object.entries(chapters)) {
-        if (!adjacency[cid]) adjacency[cid] = [];
-        const targets = new Set();
-
-        for (const step of steps) {
-            if (step.jumpChapter) targets.add(step.jumpChapter);
-            if (step.type === 'jump' && step.endingId) {
-                targets.add('_end_' + step.endingId);
-            }
-            if (step.type === 'choice' && step.choices) {
-                for (const ch of step.choices) {
-                    if (ch.jumpChapter) targets.add(ch.jumpChapter);
-                }
-            }
-        }
-
-        adjacency[cid] = [...targets];
-        for (const t of targets) {
-            incoming[t] = (incoming[t] || 0) + 1;
-        }
-    }
-
-    // 未出现在 incoming 中的章节为根节点
-    const allIds = Object.keys(chapters);
-    const roots = allIds.filter(id => !incoming[id]);
-    // 没有 outgoing 的为叶节点
-    const leaves = allIds.filter(id => adjacency[id] && adjacency[id].length === 0);
-
-    // 确保 'main' 总是第一个根
-    if (roots.includes('main')) {
-        roots.splice(roots.indexOf('main'), 1);
-        roots.unshift('main');
-    }
-
-    return { adjacency, incoming, roots, leaves };
-}
-
-/**
- * 自动布局 —— 入口节点在上方，按树状分支从上到下排列
- *
- * 算法：
- *  1. BFS 分层（layer = y 坐标）
- *  2. 提取"主父节点"树（多父节点取层数最浅的那个），用于树状定位
- *  3. 自底向上计算子树宽度
- *  4. 自顶向下分配 x 坐标（子节点在其父节点下居中排列）
- *  5. 多父节点调整：有多个父节点的子节点，在父节点间取平均 x
- *  6. 孤立节点放在主树下方
- */
-function computeLayout(chapters, nodeSizes = {}) {
-    const { adjacency, roots } = analyzeTree(chapters);
-    const allIds = Object.keys(chapters);
-    if (allIds.length === 0) return {};
-
-    // ── 常量 ──────────────────────────────────────────────────────
-    const DEFAULT_W = 200;
-    const DEFAULT_H = 90;
-    const H_GAP = 40;       // 兄弟子树之间的水平间距
-    const V_GAP = 80;       // 层间垂直间距
-    const MIN_LAYER_GAP = 30; // 不同根子树之间的额外间距
-    const ORIGIN_X = 300;
-    const ORIGIN_Y = 80;
-
-    // 获取节点实际尺寸，未设置则用默认值
-    function nodeW(id) { return nodeSizes[id]?.width || DEFAULT_W; }
-    function nodeH(id) { return nodeSizes[id]?.height || DEFAULT_H; }
-
-    // ── 1. BFS 分层 ──────────────────────────────────────────────
-    const layerOf = {};    // id → 层号（从上到下 0,1,2…）
-    const layers = [];     // layers[layer] = [id, …]
-    const visited = new Set();
-    const queue = [];
-
-    // 根节点入第 0 层
-    for (const r of roots) {
-        layerOf[r] = 0;
-        visited.add(r);
-        queue.push(r);
-    }
-
-    while (queue.length > 0) {
-        const cur = queue.shift();
-        const l = layerOf[cur];
-        if (!layers[l]) layers[l] = [];
-        if (!layers[l].includes(cur)) layers[l].push(cur);
-
-        for (const t of adjacency[cur] || []) {
-            if (t === cur) continue; // 忽略自环
-            const nl = l + 1;
-            if (nl > allIds.length + 5) continue; // 防止循环
-            if (!visited.has(t) || (layerOf[t] < nl)) {
-                layerOf[t] = nl;
-                visited.add(t);
-                queue.push(t);
-            }
-        }
-    }
-
-    // 孤立节点（未被 BFS 遍历到的）放到最后一层之后
-    const orphans = [];
-    for (const id of allIds) {
-        if (!visited.has(id)) {
-            orphans.push(id);
-            layerOf[id] = layers.length;
-        }
-    }
-
-    // ── 2. 构建主父节点树 ────────────────────────────────────────
-    // 对于每个非根节点，选择"层数最浅"的那个父节点作为定位依据
-    // 这样分支会从尽量靠上的父节点展开
-    const primaryParent = {}; // childId → parentId
-    const children = {};      // parentId → [childId, …]
-
-    for (const [parent, targets] of Object.entries(adjacency)) {
-        if (layerOf[parent] === undefined) continue;
-        for (const child of targets) {
-            if (child === parent) continue;
-            // 跳过同层边（BFS 不应产生，但防御）
-            if (layerOf[child] === undefined || layerOf[child] <= layerOf[parent]) continue;
-            if (primaryParent[child] === undefined ||
-                layerOf[primaryParent[child]] > layerOf[parent]) {
-                primaryParent[child] = parent;
-            }
-        }
-    }
-    for (const [child, parent] of Object.entries(primaryParent)) {
-        if (!children[parent]) children[parent] = [];
-        children[parent].push(child);
-    }
-
-    // ── 3. 自底向上计算子树宽度 ──────────────────────────────────
-    const subtreeW = {};  // id → 该节点子树需要的总宽度
-
-    function calcSubtree(id) {
-        if (subtreeW[id] !== undefined) return subtreeW[id];
-        const w = nodeW(id);
-        const kids = children[id] || [];
-        if (kids.length === 0) {
-            subtreeW[id] = w;
-            return w;
-        }
-        let total = 0;
-        for (const k of kids) {
-            total += calcSubtree(k);
-        }
-        total += (kids.length - 1) * H_GAP;
-        subtreeW[id] = Math.max(w, total);
-        return subtreeW[id];
-    }
-
-    for (const id of allIds) calcSubtree(id);
-    for (const id of orphans) calcSubtree(id);
-
-    // ── 4. 自顶向下分配 x 坐标 ────────────────────────────────────
-    const xPos = {};  // id → 相对 x（节点中心，水平偏移 0 = 根起点）
-
-    function assignX(id, centerX) {
-        xPos[id] = centerX;
-        const kids = children[id] || [];
-        if (kids.length === 0) return;
-
-        let totalW = 0;
-        for (const k of kids) totalW += subtreeW[k];
-        totalW += (kids.length - 1) * H_GAP;
-
-        let curX = centerX - totalW / 2;
-        for (const k of kids) {
-            assignX(k, curX + subtreeW[k] / 2);
-            curX += subtreeW[k] + H_GAP;
-        }
-    }
-
-    // 多个根节点先排好，每个根及其子树自成一个"大分支"
-    // 计算根节点们的总宽度
-    let rootsTotalW = 0;
-    for (const r of roots) rootsTotalW += subtreeW[r];
-    rootsTotalW += (roots.length - 1) * (H_GAP + MIN_LAYER_GAP);
-
-    let rootCurX = -rootsTotalW / 2;
-    for (const r of roots) {
-        assignX(r, rootCurX + subtreeW[r] / 2);
-        rootCurX += subtreeW[r] + H_GAP + MIN_LAYER_GAP;
-    }
-
-    // ── 5. 多父节点调整 ──────────────────────────────────────────
-    // 如果一个节点有多个父节点，把它摆在所有父节点的水平居中位置，
-    // 可以减少边交叉，布局更直观。
-    {
-        const mpTarget = {}; // childId → 目标 x（所有父节点的平均）
-        for (const [child] of Object.entries(primaryParent)) {
-            const allP = [];
-            for (const [p, targets] of Object.entries(adjacency)) {
-                if (targets.includes(child) && p !== child && (layerOf[p] ?? -1) < (layerOf[child] ?? Infinity)) {
-                    allP.push(p);
-                }
-            }
-            if (allP.length > 1) {
-                let sumX = 0, cnt = 0;
-                for (const p of allP) {
-                    if (xPos[p] !== undefined) { sumX += xPos[p]; cnt++; }
-                }
-                if (cnt >= 2) mpTarget[child] = sumX / cnt;
-            }
-        }
-
-        // 对每个多父节点计算 delta，然后整体偏移该节点及所有后代
-        const mpVisited = new Set();
-        function mpShift(id, delta) {
-            if (mpVisited.has(id)) return;
-            mpVisited.add(id);
-            xPos[id] += delta;
-            for (const k of (children[id] || [])) mpShift(k, delta);
-        }
-
-        for (const [child, targetX] of Object.entries(mpTarget)) {
-            const delta = targetX - xPos[child];
-            mpShift(child, delta);
-        }
-    }
-
-    // ── 6. 孤立节点定位 ──────────────────────────────────────────
-    // 孤立节点放在主树下方，横向排开
-    if (orphans.length > 0) {
-        let orphanY = layers.length;
-        if (roots.length === 0) orphanY = 0;
-        const orphanLayer = orphanY;
-        if (!layers[orphanLayer]) layers[orphanLayer] = [];
-        // 使用实际节点宽度
-        let orphanX = 0;
-        for (const o of orphans) {
-            layerOf[o] = orphanLayer;
-            layers[orphanLayer].push(o);
-            xPos[o] = orphanX;
-            orphanX += nodeW(o) + H_GAP;
-        }
-        const totalW = orphans.reduce((sum, o) => sum + nodeW(o), 0) + (orphans.length - 1) * H_GAP;
-        const shiftOrphanX = -totalW / 2;
-        for (const o of orphans) {
-            xPos[o] += shiftOrphanX;
-        }
-    }
-
-    // ── 7. 转换为最终坐标 ────────────────────────────────────────
-    const positions = {};
-
-    // 找出最小 x，将所有节点右移使坐标为正
-    let minX = Infinity;
-    for (const id of allIds) {
-        if (xPos[id] !== undefined && xPos[id] < minX && isFinite(xPos[id])) {
-            minX = xPos[id];
-        }
-    }
-    const shiftX = (isFinite(minX) && minX < 0) ? -minX + DEFAULT_W / 2 : DEFAULT_W / 2;
-
-    // 计算每层的最大高度，用于 Y 轴定位
-    const layerMaxH = {};
-    for (const id of allIds) {
-        const l = layerOf[id];
-        if (l === undefined) continue;
-        layerMaxH[l] = Math.max(layerMaxH[l] || 0, nodeH(id));
-    }
-
-    // 逐层计算 Y 坐标（实际高度累加）
-    const layerY = {};
-    let curY = ORIGIN_Y;
-    for (let li = 0; li < layers.length; li++) {
-        const maxH = layerMaxH[li] || DEFAULT_H;
-        layerY[li] = curY + maxH / 2;
-        curY += maxH + V_GAP;
-    }
-
-    for (const id of allIds) {
-        const l = layerOf[id];
-        if (l === undefined) continue;
-        positions[id] = {
-            x: (xPos[id] || 0) + shiftX + ORIGIN_X,
-            y: layerY[l] !== undefined ? layerY[l] : curY + nodeH(id) / 2,
-        };
-    }
-
-    return positions;
-}
-
-/**
- * 计算从底部端口（圆形）到顶部端口（圆角矩形）的 SVG 贝塞尔曲线路径
- */
-function computeEdgePath(fromNode, fromPort, toNode, toPort) {
-    if (!fromPort || !toPort) return '';
-    // 使用端口存储的世界坐标（在 treeNodes 中预先计算好）
-    const x1 = fromPort.pxWorld;
-    const y1 = fromPort.pyWorld;
-    const x2 = toPort.pxWorld;
-    const y2 = toPort.pyWorld;
-
-    const dy = Math.abs(y2 - y1);
-    const cpOffset = Math.max(50, dy * 0.5);
-
-    return `M ${x1} ${y1} C ${x1} ${y1 + cpOffset}, ${x2} ${y2 - cpOffset}, ${x2} ${y2}`;
-}
+// analyzeTree, computeLayout, computeEdgePath, computeEndingLayout
+// 现在由 ./tree-layout.js 的 import 提供
 
 /**
  * 计算从外部点射向节点中心的射线与节点矩形边界的交点（用于磁吸和周围拖拽）
@@ -413,7 +110,7 @@ createApp({
         const chapters = reactive(clone(GameData.STORY_CHAPTERS));
 
         // ── 章节简介 ─────────────────────────────────────────────────
-        const chapterDescriptions = reactive({}); // { [chapterId]: "简介文本" }
+        const chapterDescriptions = reactive(clone(GameData.CHAPTER_DESCRIPTIONS || {})); // { [chapterId]: "简介文本" }
 
         // ── 入口节点（package 可以有多个入口，但执行时指定唯一入口） ────
         // 默认入口为 'main'
@@ -596,6 +293,104 @@ createApp({
         // Toast
         const toastMsg = ref('');
         let toastTimer = null;
+
+        // ── Undo / Redo ──────────────────────────────────────────────────
+        const MAX_UNDO = 50;
+        const undoStack = [];       // 过去的状态快照
+        const redoStack = [];       // 撤销后的状态（可重做）
+        const undoLock = ref(false); // 防止 restore 时重复保存
+
+        /** 获取当前全部可编辑状态的深拷贝快照 */
+        function captureState() {
+            return {
+                chapters: clone(chapters),
+                chapterDescriptions: clone(chapterDescriptions),
+                nodePositions: clone(nodePositions),
+                nodeStyles: clone(nodeStyles),
+                gameEndings: clone(gameEndings),
+                editorGroups: clone(editorGroups),
+                canvasComments: clone(canvasComments),
+                entryPoints: clone(entryPoints),
+            };
+        }
+
+        /** 将快照恢复到各 reactive 对象 */
+        function restoreState(snapshot) {
+            undoLock.value = true;
+            // chapters（reactive 对象 → 删旧添新）
+            for (const key of Object.keys(chapters)) { if (!(key in snapshot.chapters)) delete chapters[key]; }
+            for (const [k, v] of Object.entries(snapshot.chapters)) chapters[k] = clone(v);
+            // chapterDescriptions
+            for (const key of Object.keys(chapterDescriptions)) { if (!(key in snapshot.chapterDescriptions)) delete chapterDescriptions[key]; }
+            for (const [k, v] of Object.entries(snapshot.chapterDescriptions)) chapterDescriptions[k] = v;
+            // nodePositions
+            for (const key of Object.keys(nodePositions)) { if (!(key in snapshot.nodePositions)) delete nodePositions[key]; }
+            for (const [k, v] of Object.entries(snapshot.nodePositions)) nodePositions[k] = { ...v };
+            // nodeStyles
+            for (const key of Object.keys(nodeStyles)) { if (!(key in snapshot.nodeStyles)) delete nodeStyles[key]; }
+            for (const [k, v] of Object.entries(snapshot.nodeStyles)) nodeStyles[k] = { ...v };
+            // gameEndings（数组）
+            gameEndings.length = 0;
+            for (const item of snapshot.gameEndings) gameEndings.push(clone(item));
+            // editorGroups
+            for (const key of Object.keys(editorGroups)) { if (!(key in snapshot.editorGroups)) delete editorGroups[key]; }
+            for (const [k, v] of Object.entries(snapshot.editorGroups)) editorGroups[k] = { ...v };
+            // canvasComments
+            for (const key of Object.keys(canvasComments)) { if (!(key in snapshot.canvasComments)) delete canvasComments[key]; }
+            for (const [k, v] of Object.entries(snapshot.canvasComments)) canvasComments[k] = { ...v };
+            // entryPoints
+            for (const key of Object.keys(entryPoints)) { if (!(key in snapshot.entryPoints)) delete entryPoints[key]; }
+            for (const [k, v] of Object.entries(snapshot.entryPoints)) entryPoints[k] = v;
+            undoLock.value = false;
+        }
+
+        /** 保存当前状态到撤销栈（在每次变更前调用） */
+        function saveUndoSnapshot() {
+            if (undoLock.value) return; // restore 中不保存
+            undoStack.push(captureState());
+            if (undoStack.length > MAX_UNDO) undoStack.shift();
+            redoStack.length = 0; // 新变更清空重做栈
+        }
+
+        /** 撤销 */
+        function undo() {
+            if (undoStack.length === 0) {
+                showToast('没有可撤销的操作');
+                return;
+            }
+            // 当前状态 → 重做栈
+            redoStack.push(captureState());
+            const prev = undoStack.pop();
+            restoreState(prev);
+            showToast(`已撤销 (还可撤销 ${undoStack.length} 步)`);
+        }
+
+        /** 重做 */
+        function redo() {
+            if (redoStack.length === 0) {
+                showToast('没有可重做的操作');
+                return;
+            }
+            // 当前状态 → 撤销栈
+            undoStack.push(captureState());
+            const next = redoStack.pop();
+            restoreState(next);
+            showToast(`已重做 (还可撤销 ${undoStack.length} 步)`);
+        }
+
+        // 初始化：保存初始状态
+        saveUndoSnapshot();
+
+        // 撤销/重做计数的响应式引用（供模板绑定禁用状态）
+        const undoCount = ref(undoStack.length);
+        const redoCount = ref(redoStack.length);
+        // 每次 saveUndoSnapshot/undo/redo 后更新计数
+        const origSave = saveUndoSnapshot;
+        saveUndoSnapshot = function() { origSave(); undoCount.value = undoStack.length; redoCount.value = 0; };
+        const origUndo = undo;
+        undo = function() { origUndo(); undoCount.value = undoStack.length; redoCount.value = redoStack.length; };
+        const origRedo = redo;
+        redo = function() { origRedo(); undoCount.value = undoStack.length; redoCount.value = redoStack.length; };
 
         // 导出弹窗
         const showExportModal = ref(false);
@@ -1196,103 +991,7 @@ createApp({
             showToast('已自动排列节点布局');
         }
 
-        /**
-         * 自动布局结局节点 —— 放在章节树下方
-         * 被引用的结局居中于其源章节；未被引用的结局在底部居中排列
-         */
-        function computeEndingLayout(chapters, endings, chapterPositions, nodeSizes = {}) {
-            const positions = {};
-            const DEFAULT_W = 180;
-            const DEFAULT_H = 60;
-            const H_GAP = 40;
-            const V_GAP = 80;
-
-            function endW(id) { return nodeSizes[id]?.width || DEFAULT_W; }
-            function endH(id) { return nodeSizes[id]?.height || DEFAULT_H; }
-
-            // 构建引用映射：endingId → [sourceChapterId]
-            // jump_step 的 endingId 派生（ending_trigger）和处理独立 ending 类型一并统计
-            const sourceMap = {};
-            for (const [cid, steps] of Object.entries(chapters)) {
-                for (const step of steps) {
-                    let endId = null;
-                    if (step.type === 'jump' && step.endingId) {
-                        endId = step.endingId; // ending_trigger：jump 的派生
-                    }
-                    if (endId) {
-                        if (!sourceMap[endId]) sourceMap[endId] = [];
-                        if (!sourceMap[endId].includes(cid)) sourceMap[endId].push(cid);
-                    }
-                }
-            }
-
-            // 找章节树最底部（节点底部边缘）
-            let maxChapterBottom = 0;
-            for (const pos of Object.values(chapterPositions)) {
-                const bottom = pos.y + 45; // 节点中心 y + 半高 (90/2)
-                if (bottom > maxChapterBottom) maxChapterBottom = bottom;
-            }
-
-            // 基于第 1 行被引用结局的实际高度确定 Y
-            const referencedMaxH = Math.max(
-                ...endings.filter(e => sourceMap[e.id]?.length > 0).map(e => endH('_end_' + e.id)),
-                DEFAULT_H
-            );
-            const ROW1_Y = maxChapterBottom + V_GAP + referencedMaxH / 2;
-
-            // ── 第 1 行：被引用的结局，在源章节下方居中 ──────────
-            const referencedIds = [];
-            for (const end of endings) {
-                const srcList = sourceMap[end.id] || [];
-                if (srcList.length === 0) continue;
-
-                let sumX = 0, count = 0;
-                for (const src of srcList) {
-                    const p = chapterPositions[src];
-                    if (p) { sumX += p.x; count++; }
-                }
-                if (count === 0) continue;
-
-                positions['_end_' + end.id] = { x: sumX / count, y: ROW1_Y };
-                referencedIds.push(end.id);
-            }
-
-            // ── 第 2 行：未被引用的结局，在底部横向排开 ──────────
-            const unreferenced = endings.filter(e => !referencedIds.includes(e.id));
-            if (unreferenced.length > 0) {
-                // 第 2 行基于第 1 行的实际高度
-                const row1H = referencedIds.length > 0
-                    ? Math.max(...referencedIds.map(e => endH('_end_' + e)))
-                    : DEFAULT_H;
-                const row2H = Math.max(...unreferenced.map(e => endH('_end_' + e.id)), DEFAULT_H);
-                const ROW2_Y = ROW1_Y + row1H / 2 + V_GAP + row2H / 2;
-
-                // 基准中心：以第 1 行引用结局的中心为准（若无则用章节树中心）
-                let centerX = 0, countCenter = 0;
-                if (referencedIds.length > 0) {
-                    for (const endId of referencedIds) {
-                        const p = positions['_end_' + endId];
-                        if (p) { centerX += p.x; countCenter++; }
-                    }
-                } else {
-                    for (const pos of Object.values(chapterPositions)) {
-                        centerX += pos.x; countCenter++;
-                    }
-                }
-                centerX = countCenter > 0 ? centerX / countCenter : 0;
-
-                // 每个结局使用其实际宽度
-                let curX = centerX - unreferenced.reduce((sum, e) => sum + endW('_end_' + e.id), 0) / 2
-                          - (unreferenced.length - 1) * H_GAP / 2;
-                for (const end of unreferenced) {
-                    const w = endW('_end_' + end.id);
-                    positions['_end_' + end.id] = { x: curX + w / 2, y: ROW2_Y };
-                    curX += w + H_GAP;
-                }
-            }
-
-            return positions;
-        }
+        // computeEndingLayout 已由 ./tree-layout.js 的 import 提供
 
         // ── 缩放平移 ──────────────────────────────────────────────────
         function zoomIn() {
@@ -1465,6 +1164,7 @@ createApp({
         // ── 节点拖拽 ──────────────────────────────────────────────────
         function onNodeMouseDown(e, node) {
             if (e.button !== 0) return; // 只响应左键
+            saveUndoSnapshot(); // 拖拽前保存状态
             dragging.active = true;
             dragging.nodeId = node.id;
             dragging.startX = e.clientX;
@@ -1500,6 +1200,7 @@ createApp({
         }
 
         function selectStep(index) {
+            saveUndoSnapshot(); // 保存状态，编辑步骤文本后可撤销
             editingStepIndex.value = index;
         }
 
@@ -1581,6 +1282,7 @@ createApp({
         }
 
         function contextDuplicateChapter() {
+            saveUndoSnapshot();
             if (!contextMenu.nodeId) { closeContextMenu(); return; }
             const srcId = contextMenu.nodeId;
             // 结局节点不能复制为章节
@@ -1614,6 +1316,7 @@ createApp({
         }
 
         function addChapterAtPos(worldX, worldY) {
+            saveUndoSnapshot();
             const newId = uid('chapter');
             chapters[newId] = [{
                 sceneId: '',
@@ -1634,6 +1337,7 @@ createApp({
         }
 
         function addStepFromContext() {
+            saveUndoSnapshot();
             if (!contextMenu.nodeId) { closeContextMenu(); return; }
             if (isEndingNode(contextMenu.nodeId)) {
                 showToast('结局节点不能添加步骤');
@@ -1980,6 +1684,7 @@ createApp({
         }
 
         function updatePortTarget(port, newTargetId) {
+            saveUndoSnapshot();
             const steps = chapters[portDragging.fromNodeId];
             if (!steps) return;
             const step = steps[port.stepIdx];
@@ -2082,6 +1787,7 @@ createApp({
 
         /** 从当前选中节点创建分组 */
         function createGroupFromSelection() {
+            saveUndoSnapshot();
             const ids = Object.keys(selectedNodeIds);
             if (ids.length < 2) { showToast('请先框选至少 2 个节点'); return; }
             const groupId = uid('group');
@@ -2108,6 +1814,7 @@ createApp({
         function deleteGroup(groupId) {
             if (!groupId || !editorGroups[groupId]) return;
             if (!confirm(`确定删除分组「${editorGroups[groupId].name}」？`)) return;
+            saveUndoSnapshot();
             delete editorGroups[groupId];
             if (selectedGroupId.value === groupId) selectedGroupId.value = null;
             showToast('已删除分组');
@@ -2214,6 +1921,7 @@ createApp({
         });
 
         function applyBatchStyle(prop, value) {
+            saveUndoSnapshot();
             for (const id of Object.keys(selectedNodeIds)) {
                 if (!nodeStyles[id]) nodeStyles[id] = {};
                 nodeStyles[id][prop] = value;
@@ -2595,6 +2303,7 @@ createApp({
 
         // ── 章节操作 ──────────────────────────────────────────────────
         function addChapter() {
+            saveUndoSnapshot();
             const newId = uid('chapter');
             chapters[newId] = [{
                 sceneId: '',
@@ -2621,6 +2330,7 @@ createApp({
 
         /** 在画布上创建结局节点 */
         function addEndingNode() {
+            saveUndoSnapshot();
             const newId = uid('end');
             const newEnding = { id: newId, title: '新结局', description: '' };
             gameEndings.push(newEnding);
@@ -2635,6 +2345,7 @@ createApp({
 
         /** 在指定世界坐标创建结局节点（右键菜单用） */
         function addEndingNodeAtPos(worldX, worldY) {
+            saveUndoSnapshot();
             const newId = uid('end');
             const newEnding = { id: newId, title: '新结局', description: '' };
             gameEndings.push(newEnding);
@@ -2648,7 +2359,8 @@ createApp({
             if (batchIds && batchIds.length > 1) {
                 const hasEnding = batchIds.some(id => getNodeType(id) === NODE_TYPE.ENDING);
                 const typeLabel = hasEnding ? '节点' : '章节';
-                if (!confirm(`确定要删除选中的 ${batchIds.length} 个${typeLabel}吗？\n\n此操作不可撤销。\n其他章节中指向这些${typeLabel}的跳转不会被自动清理。`)) return;
+                if (!confirm(`确定要删除选中的 ${batchIds.length} 个${typeLabel}吗？\n\n其他章节中指向这些${typeLabel}的跳转不会被自动清理。`)) return;
+                saveUndoSnapshot();
                 for (const id of batchIds) {
                     if (isEndingNode(id)) {
                         deleteEndingNodeById(id, false);
@@ -2673,6 +2385,7 @@ createApp({
 
             if (isEndingNode(singleId)) {
                 if (!confirm(`确定要删除结局 "${selectedEndingNode.value?.label || singleId}" 吗？\n\n此结局的相关数据将从游戏结束列表中移除。\n其他章节中指向此结局的跳转不会被自动清理。`)) return;
+                saveUndoSnapshot();
                 deleteEndingNodeById(singleId, true);
                 selectedEndingId.value = null;
                 editingStepIndex.value = null;
@@ -2683,7 +2396,7 @@ createApp({
             // 章节删除（原有逻辑）
             const id = singleId;
             if (!confirm(`确定要删除章节 "${id}" 吗？\n\n此操作会删除该章节的所有步骤。\n其他章节中指向此章节的跳转不会被自动清理。`)) return;
-
+            saveUndoSnapshot();
             delete chapters[id];
             delete nodePositions[id];
             delete nodeStyles[id];
@@ -2719,6 +2432,7 @@ createApp({
         }
 
         function onChapterIdChange() {
+            saveUndoSnapshot();
             const oldId = selectedChapterId.value;
             if (!oldId) return;
             const newId = editingChapterId.value;
@@ -2755,6 +2469,7 @@ createApp({
 
         // ── 步骤操作 ──────────────────────────────────────────────────
         function addStep() {
+            saveUndoSnapshot();
             if (!selectedChapterId.value) return;
             const steps = chapters[selectedChapterId.value];
             const newStep = {
@@ -2780,6 +2495,7 @@ createApp({
         }
 
         function deleteStep(index) {
+            saveUndoSnapshot();
             if (!selectedChapterId.value) return;
             const steps = chapters[selectedChapterId.value];
             // 禁止删除末尾的 jump step（章节末端标记）
@@ -2798,6 +2514,7 @@ createApp({
         }
 
         function moveStep(index, direction) {
+            saveUndoSnapshot();
             if (!selectedChapterId.value) return;
             const steps = chapters[selectedChapterId.value];
             const newIndex = index + direction;
@@ -2815,6 +2532,7 @@ createApp({
 
         // ── 分支选项操作 ──────────────────────────────────────────────
         function addChoice() {
+            saveUndoSnapshot();
             if (!editingStep.value || editingStep.value.type !== 'choice') return;
             if (!editingStep.value.choices) editingStep.value.choices = [];
             editingStep.value.choices.push({
@@ -2826,6 +2544,7 @@ createApp({
         }
 
         function removeChoice(index) {
+            saveUndoSnapshot();
             if (!editingStep.value || !editingStep.value.choices) return;
             editingStep.value.choices.splice(index, 1);
         }
@@ -2877,6 +2596,7 @@ createApp({
         }
 
         function syncCharChangesToStep() {
+            saveUndoSnapshot();
             if (!editingStep.value) return;
             const valid = (editingStep.value._charChanges || []).filter(cc => cc.id);
             if (valid.length > 0) {
@@ -2931,8 +2651,10 @@ createApp({
                 if (step.endingId) return `[结局触发] → ${step.endingId}`;
                 return `[跳转] → ${step.jumpChapter || '(无目标)'}`;
             }
-            if (step.text) return step.text.substring(0, 50) + (step.text.length > 50 ? ' ' : '');
-            return '(空对话)';
+            const previewText = step.texts && step.texts.length
+                ? step.texts[0]
+                : (step.text || '');
+            return previewText.substring(0, 50) + (previewText.length > 50 ? ' ' : '');
         }
 
         function stepTypeLabel(type, step) {
@@ -3084,8 +2806,9 @@ createApp({
             selectedChapterId.value = null;
             selectedEndingId.value = null;
             editingStepIndex.value = null;
-            // 清空章节简介
+            // 还原章节简介
             for (const key of Object.keys(chapterDescriptions)) delete chapterDescriptions[key];
+            for (const [key, val] of Object.entries(GameData.CHAPTER_DESCRIPTIONS || {})) chapterDescriptions[key] = val;
             autoLayout();
             showToast('已还原所有数据为原始版本');
         }
@@ -3479,17 +3202,17 @@ createApp({
                 return;
             }
 
-            // Ctrl+Z: 撤销（暂未实现历史记录）
+            // Ctrl+Z: 撤销
             if (ctrl && !shift && key === 'z') {
                 e.preventDefault();
-                showToast('⚠ 撤销功能暂未实现（可手动还原）');
+                undo();
                 return;
             }
 
             // Ctrl+Shift+Z / Ctrl+Y: 重做
             if ((ctrl && shift && key === 'z') || (ctrl && key === 'y')) {
                 e.preventDefault();
-                showToast('⚠ 重做功能暂未实现');
+                redo();
                 return;
             }
 
@@ -3578,7 +3301,7 @@ createApp({
             totalChapters, totalSteps, totalChoices,
             availableEffects,
             // 方法
-            showToast, autoLayout, zoomIn, zoomOut, resetView,
+            showToast, undo, redo, undoCount, redoCount, autoLayout, zoomIn, zoomOut, resetView,
             handleWheel, zoomToNode,
             onCanvasMouseDown, onCanvasMouseMove, onCanvasMouseUp,
             onNodeMouseDown,

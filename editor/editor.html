@@ -25,7 +25,9 @@
         <!-- ============================================================ -->
         <div class="editor-toolbar">
             <div class="toolbar-left">
-                <button class="tb-icon-btn" data-tooltip="新建章节 (Ctrl+N)" @click="addChapter">➕</button>
+                <button class="tb-icon-btn" :class="{ 'tb-disabled': !undoCount }" data-tooltip="撤销 (Ctrl+Z)" @click="undo" :disabled="!undoCount">↩</button>
+                <button class="tb-icon-btn" :class="{ 'tb-disabled': !redoCount }" data-tooltip="重做 (Ctrl+Shift+Z)" @click="redo" :disabled="!redoCount">↪</button>
+                <span class="toolbar-sep"></span>
                 <button class="tb-icon-btn" data-tooltip="自动布局" @click="autoLayout">🔄</button>
                 <div class="toolbar-submenu-wrap">
                     <button class="tb-icon-btn" data-tooltip="导入/导出" @click.stop="showFileMenu = !showFileMenu">📂</button>
@@ -196,7 +198,6 @@
                                 <span class="node-out-count" v-if="node.outgoing > 0 && !node.isEnding">{{ node.outgoing }} 出口</span>
                                 <span class="node-in-count" v-if="node.incoming > 0">{{ node.incoming }} 入口</span>
                             </div>
-                            <div class="node-preview" v-if="node.firstText && !node.isEnding">{{ node.firstText }}</div>
                             <div class="node-description" v-if="node.description && !node.isEnding" :title="node.description">{{ node.description }}</div>
                         </div>
                         <!-- 底部出口端口（圆形，一半被节点遮住，定位在弧线起点） -->
@@ -447,6 +448,7 @@
                             </div>
                             <div class="step-card-body">
                                 <div class="step-text-preview">{{ stepTextBrief(step) }}</div>
+                                <div class="step-batch-badge" v-if="step.texts && step.texts.length > 1">{{ step.texts.length }}段</div>
                             </div>
                         </div>
                         <div class="step-list-empty" v-if="editingSteps.length === 0">
@@ -488,6 +490,9 @@
                             <div class="form-row">
                                 <label>对话文本</label>
                                 <textarea v-model="editingStep.text" rows="4" placeholder="输入对话或叙述文本..."></textarea>
+                                <div class="step-texts-info" v-if="editingStep.texts && editingStep.texts.length > 1">
+                                    📚 {{ editingStep.texts.length }}段批处理文本（引擎将作为连续流处理，减少步骤开销）
+                                </div>
                             </div>
                             <div class="form-row">
                                 <label>屏幕特效</label>

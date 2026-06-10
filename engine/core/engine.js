@@ -54,6 +54,9 @@ export class GalEngine extends EventEmitter {
         // ---- 内部定时器 ----
         this._typingTimer = null;
         this._autoAdvanceTimer = null;
+        // ---- 文本批处理（texts 数组多段推进，减少 _executeStep 调用） ----
+        this._textBatch = null;      // string[] | null
+        this._textBatchIndex = 0;    // 当前批次内的文本索引
 
         // ---- 回调钩子（供外部注入 UI 行为） ----
         this._hooks = {
@@ -108,13 +111,43 @@ export class GalEngine extends EventEmitter {
 
     /**
      * 推进剧情（点击对话框 / 全局点击）
-     * @returns {string} 操作结果: 'typing' | 'advance' | 'choice' | 'ending' | 'end'
+     * @returns {string} 操作结果: 'typing' | 'text_batch' | 'advance' | 'choice' | 'ending' | 'end'
      */
     advance() {
         // 正在打字 → 强制完成
         if (!this.state.typingFinished) {
             this._finishTyping();
             return 'typing';
+        }
+
+        // 文本批处理：当前段打字完毕，推进到下一段（不触发 _executeStep）
+        if (this._textBatch && this._textBatchIndex < this._textBatch.length - 1) {
+            this._textBatchIndex++;
+            const nextText = this._textBatch[this._textBatchIndex];
+            const speed = this._resolveBatchSpeed();
+
+            // 应用当前批段的 per-text 特效（effects / screenEffect 变化）
+            const step = this.currentStep;
+            if (step && step.textEffects && step.textEffects[this._textBatchIndex]) {
+                const te = step.textEffects[this._textBatchIndex];
+                if (te.effects !== undefined) this.state.setActiveEffects(te.effects);
+                if (te.screenEffect !== undefined && te.screenEffect !== this.state.currentScreenEffect) {
+                    this.state.setScreenEffect(te.screenEffect);
+                    this.emit('effect:screen', te.screenEffect);
+                }
+                this.emit('effect:change', {
+                    effects: this.state.activeEffects,
+                    screenEffect: this.state.currentScreenEffect,
+                });
+            }
+
+            this._startTypewriter(nextText, speed);
+            this.emit('typewriter:batch', {
+                index: this._textBatchIndex,
+                total: this._textBatch.length,
+                text: nextText,
+            });
+            return 'text_batch';
         }
 
         // 有待触发的结局
@@ -294,7 +327,7 @@ export class GalEngine extends EventEmitter {
             return;
         }
 
-        // ---- 对话 ----
+        // ---- 对话（支持 texts 多段批处理） ----
         if (step.type === 'dialogue') {
             let speed = this.config.textSpeed;
             if (step.characterId && this.characters[step.characterId]?.defaultSpeed !== undefined) {
@@ -302,15 +335,30 @@ export class GalEngine extends EventEmitter {
             }
             if (step.speed !== undefined) speed = step.speed;
 
-            this._startTypewriter(step.text, speed);
+            // 明确声明 texts 数组 → 多段批处理
+            const batchTexts = step.texts && step.texts.length ? step.texts : null;
 
-            // 历史记录
+            if (batchTexts) {
+                this._textBatch = batchTexts;
+                this._textBatchIndex = 0;
+                this._startTypewriter(batchTexts[0], speed);
+            } else {
+                this._textBatch = null;
+                this._textBatchIndex = 0;
+                this._startTypewriter(step.text || '', speed);
+            }
+
+            // 历史记录（不论 batch 多大，只记录一条）
+            const displayText = batchTexts
+                ? batchTexts[0].substring(0, 120)
+                : ((step.text || '').substring(0, 120));
             const logMeta = {
                 chapterId: this.state.currentChapterId,
                 stepIndex: this.state.currentStepIndex,
                 speaker: this._getSpeakerName(),
                 color: this._getSpeakerColor(),
-                text: step.text,
+                text: displayText,
+                textsFull: batchTexts && batchTexts.length > 1 ? batchTexts : undefined,
                 snap: this.state.snapshot()
             };
 
@@ -320,7 +368,6 @@ export class GalEngine extends EventEmitter {
             if (!isExist) {
                 this.state.pushHistoryLog(logMeta);
                 // 内存优化：仅保留最近 30 条历史记录的完整 snap（用于回滚）
-                // 更旧的日志保留文本和元数据（供 timeline 展示），但释放其 snap
                 if (this.state.historyLogs.length > 30) {
                     const stale = this.state.historyLogs.length - 30;
                     for (let i = 0; i < stale; i++) {
@@ -387,7 +434,9 @@ export class GalEngine extends EventEmitter {
     _finishTyping() {
         this._clearTypingTimer();
         const step = this.currentStep;
-        if (step && step.text) {
+        if (this._textBatch && this._textBatchIndex < this._textBatch.length) {
+            this.state.setTypedText(this._textBatch[this._textBatchIndex]);
+        } else if (step && step.text) {
             this.state.setTypedText(step.text);
         }
         this.state.setTypingFinished(true);
@@ -422,28 +471,74 @@ export class GalEngine extends EventEmitter {
     // ====================================================================
 
     save(slotId, meta = {}) {
-        const snap = this.state.snapshot();
-        const sceneCfg = this.scenes[this.currentStep?.sceneId];
-
-        // 关键修复：剥离 historyLogs 中嵌套的 snap 字段，防止递归膨胀撑爆 localStorage
-        if (snap.historyLogs) {
-            snap.historyLogs = snap.historyLogs.map(log => {
-                const { snap: _snap, ...rest } = log;
-                return rest;
-            });
-            // 仅保留最近 50 条日志，控制存档体积
-            if (snap.historyLogs.length > 50) {
-                snap.historyLogs = snap.historyLogs.slice(-50);
-            }
+        // 1. 获取快照（snapshot 内部已做递归 snap 剥离 + 字符串截断 + 异常兜底）
+        let snap;
+        try {
+            snap = this.state.snapshot();
+        } catch (e) {
+            console.error('[GalEngine] snapshot() 生成失败，无法存档:', e.message);
+            this.emit('save:error', { slotId, error: `快照生成失败: ${e.message}` });
+            return false;
         }
 
+        if (!snap || typeof snap !== 'object') {
+            console.error('[GalEngine] snapshot() 返回无效数据，无法存档');
+            this.emit('save:error', { slotId, error: '快照数据无效' });
+            return false;
+        }
+
+        // 2. 安全获取场景配置
+        let bgPlaceholder = '#111';
+        let sceneUrl = null;
+        try {
+            const step = this.currentStep;
+            const sceneCfg = step?.sceneId ? this.scenes[step.sceneId] : null;
+            if (sceneCfg) {
+                bgPlaceholder = typeof sceneCfg.bgPlaceholder === 'string' ? sceneCfg.bgPlaceholder : '#111';
+                const resolvedUrl = step.sceneId ? this._resolveSceneUrl(step.sceneId) : null;
+                sceneUrl = resolvedUrl || null;
+            }
+        } catch (e) {
+            console.warn('[GalEngine] 获取场景配置失败:', e.message);
+        }
+
+        // 3. 构建存档数据
         const slotData = {
             ...snap,
             ...meta,
-            bgPlaceholder: sceneCfg?.bgPlaceholder || '#111',
-            sceneUrl: sceneCfg?.url || null,
+            bgPlaceholder,
+            sceneUrl,
         };
 
+        // 4. 发包前二次检查：确保所有字段可安全序列化
+        try {
+            const testJson = JSON.stringify(slotData);
+            // 预估大小，超过 3MB 发出警告
+            const estimatedSize = typeof Blob !== 'undefined' ? new Blob([testJson]).size : testJson.length;
+            if (estimatedSize > 3 * 1024 * 1024) {
+                console.warn(`[GalEngine] 存档过大 (约 ${(estimatedSize / 1024 / 1024).toFixed(1)}MB)，尝试压缩...`);
+                // 截断历史日志到最近 20 条
+                if (slotData.historyLogs && slotData.historyLogs.length > 20) {
+                    slotData.historyLogs = slotData.historyLogs.slice(-20);
+                }
+            }
+        } catch (e) {
+            console.error('[GalEngine] 存档数据不可序列化，使用精简数据重试:', e.message);
+            // 极端情况：构建最小存档数据
+            slotData.historyLogs = [];
+            slotData.stageCharacters = {};
+            slotData.activeCG = null;
+            // 再试一次
+            try {
+                JSON.stringify(slotData);
+            } catch (e2) {
+                console.error('[GalEngine] 精简后仍无法序列化，存档失败:', e2.message);
+                this.emit('save:error', { slotId, error: `数据不可序列化: ${e2.message}` });
+                return false;
+            }
+        }
+
+        // 5. 持久化
         try {
             return this.saveManager.save(slotId, slotData);
         } catch (e) {
@@ -454,16 +549,33 @@ export class GalEngine extends EventEmitter {
     }
 
     load(slotId) {
-        const data = this.saveManager.load(slotId);
-        if (!data) return false;
+        try {
+            const data = this.saveManager.load(slotId);
+            if (!data) {
+                console.warn('[GalEngine] 读取存档为空:', slotId);
+                return false;
+            }
+            if (typeof data !== 'object' || Array.isArray(data)) {
+                console.error('[GalEngine] 存档数据格式异常:', slotId);
+                return false;
+            }
 
-        this._clearTimers();
-        const prevChapter = this.state.currentChapterId;
-        this.state.restore(data);
-        this.emit('chapter:change', { from: prevChapter, to: this.state.currentChapterId, stepIndex: this.state.currentStepIndex });
-        this.emit('game:load', data);
-        this._executeStep();
-        return true;
+            this._clearTimers();
+            const prevChapter = this.state.currentChapterId;
+            this.state.restore(data);
+            this.emit('chapter:change', {
+                from: prevChapter,
+                to: this.state.currentChapterId || 'main',
+                stepIndex: this.state.currentStepIndex ?? 0
+            });
+            this.emit('game:load', data);
+            this._executeStep();
+            return true;
+        } catch (e) {
+            console.error('[GalEngine] 读档失败:', slotId, e.message);
+            this.emit('load:error', { slotId, error: e.message });
+            return false;
+        }
     }
 
     getSaveSlots() {
@@ -498,11 +610,14 @@ export class GalEngine extends EventEmitter {
     // ====================================================================
 
     _processCGChange(cg) {
+        if (!cg || typeof cg !== 'object') {
+            console.warn('[GalEngine] cgChanges 无效，已跳过');
+            return;
+        }
         if (cg.action === 'enter') {
-            const asset = this.cgLibrary[cg.id];
             const cgData = {
-                id: cg.id,
-                url: asset ? asset.url : '',
+                id: cg.id || 'unknown',
+                url: cg.id ? this._resolveCGUrl(cg.id) : '',
                 animation: cg.animation || 'scaleIn',
                 effectClass: cg.effect ? `fx-${cg.effect}` : ''
             };
@@ -530,14 +645,78 @@ export class GalEngine extends EventEmitter {
     //  角色管理
     // ====================================================================
 
+    /**
+     * 安全获取角色精灵 URL。
+     * 验证资源存在性，对缺失/异常资源返回空字符串以触发 UI 兜底占位图。
+     */
+    _resolveSpriteUrl(charId, spriteId) {
+        try {
+            const charCfg = this.characters[charId];
+            if (!charCfg) return '';
+            if (!charCfg.sprites || typeof charCfg.sprites !== 'object') return '';
+            const sprite = charCfg.sprites[spriteId];
+            if (!sprite) return '';
+            const url = sprite.url;
+            // 只接受有限长度（< 1MB）的字符串 url，拒绝对象/数字/过长 data:uri
+            if (typeof url === 'string' && url.length > 0 && url.length < 1024 * 1024) {
+                return url;
+            }
+            return '';
+        } catch (e) {
+            console.warn(`[GalEngine] 解析角色精灵 URL 失败: ${charId}/${spriteId}`, e.message);
+            return '';
+        }
+    }
+
+    /**
+     * 安全获取 CG URL。
+     */
+    _resolveCGUrl(cgId) {
+        try {
+            const asset = this.cgLibrary[cgId];
+            if (!asset) return '';
+            const url = asset.url;
+            if (typeof url === 'string' && url.length > 0 && url.length < 1024 * 1024) {
+                return url;
+            }
+            return '';
+        } catch (e) {
+            console.warn(`[GalEngine] 解析 CG URL 失败: ${cgId}`, e.message);
+            return '';
+        }
+    }
+
+    /**
+     * 安全获取场景 URL。
+     */
+    _resolveSceneUrl(sceneId) {
+        try {
+            const scene = this.scenes[sceneId];
+            if (!scene) return '';
+            const url = scene.url;
+            if (typeof url === 'string' && url.length > 0 && url.length < 1024 * 1024) {
+                return url;
+            }
+            return '';
+        } catch (e) {
+            console.warn(`[GalEngine] 解析场景 URL 失败: ${sceneId}`, e.message);
+            return '';
+        }
+    }
+
     _processCharacterChanges(changes) {
+        if (!Array.isArray(changes)) {
+            console.warn('[GalEngine] characterChanges 不是数组，已跳过');
+            return;
+        }
         changes.forEach(ch => {
+            if (!ch || typeof ch !== 'object') return;
             if (ch.action === 'enter' || ch.action === 'update') {
-                const charCfg = this.characters[ch.id];
+                const url = this._resolveSpriteUrl(ch.id, ch.spriteId);
                 this.state.setStageCharacter(ch.id, {
                     id: ch.id,
-                    spriteId: ch.spriteId,
-                    url: charCfg?.sprites[ch.spriteId]?.url || '',
+                    spriteId: ch.spriteId || 'idle',
+                    url,
                     animation: ch.animation || ''
                 });
             } else if (ch.action === 'leave') {
@@ -598,6 +777,55 @@ export class GalEngine extends EventEmitter {
         this._clearTypingTimer();
         clearTimeout(this._autoAdvanceTimer);
         this._autoAdvanceTimer = null;
+        // 清理文本批次（确保状态切换时批次不会残留）
+        this._textBatch = null;
+        this._textBatchIndex = 0;
+    }
+
+    // ====================================================================
+    //  文本批处理（降低 _executeStep 调用频率）
+    // ====================================================================
+
+    /**
+     * 收集连续的同角色纯叙述步骤，合并为文本批次。
+     * 仅合并无游戏态副作用的 dialogue 步骤（无 items / flag / cg / characterChanges）。
+     * 返回 string[] 或 null（单条时不合并）。
+     */
+    _collectDialogueBatch() {
+        const steps = this.chapters[this.state.currentChapterId];
+        if (!steps) return null;
+        const startIdx = this.state.currentStepIndex;
+        const first = steps[startIdx];
+        if (!first || first.type !== 'dialogue' || first.texts) return null;
+
+        const speakerId = first.characterId || '__narrator__';
+        const collected = [first.text || ''];
+
+        for (let i = startIdx + 1; i < steps.length; i++) {
+            const s = steps[i];
+            if (s.type !== 'dialogue') break;
+            if ((s.characterId || '__narrator__') !== speakerId) break;
+            // 有游戏态副作用 → 不可合并
+            if (s.gainItem || s.loseItem || s.updateItem || s.flag ||
+                s.cgChanges || s.characterChanges) break;
+            collected.push(s.text || '');
+        }
+
+        return collected.length > 1 ? collected : null;
+    }
+
+    /**
+     * 解析当前批次的打字速度（取当前 step 的配置）
+     */
+    _resolveBatchSpeed() {
+        const step = this.currentStep;
+        if (!step) return this.config.textSpeed;
+        let speed = this.config.textSpeed;
+        if (step.characterId && this.characters[step.characterId]?.defaultSpeed !== undefined) {
+            speed = this.characters[step.characterId].defaultSpeed;
+        }
+        if (step.speed !== undefined) speed = step.speed;
+        return speed;
     }
 
     /**
@@ -605,6 +833,8 @@ export class GalEngine extends EventEmitter {
      */
     destroy() {
         this._clearTimers();
+        this._textBatch = null;
+        this._textBatchIndex = 0;
         this.clear();
     }
 }

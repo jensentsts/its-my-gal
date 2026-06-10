@@ -417,6 +417,18 @@
 .cg-img-content.fx-sepia { filter:sepia(0.6); }
 .cg-img-content.fx-blur { filter:blur(2px); }
 
+/* CG 资源缺失占位 */
+.cg-fallback {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.6);
+    border: 2px dashed rgba(255,255,255,0.15);
+    border-radius: 8px;
+    color: rgba(255,255,255,0.3);
+}
+.cg-fallback-icon { font-size: 4rem; margin-bottom: 16px; opacity: 0.5; }
+.cg-fallback-text { font-size: 1rem; letter-spacing: 2px; }
+
 /* ---------- 粒子层 ---------- */
 .effect-canvas-container { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .game-viewport .effect-canvas-container { z-index:25; }

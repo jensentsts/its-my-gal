@@ -41,17 +41,16 @@ export const chapter_crystal_retrieval = [
     "sceneId": "secret_cavern",
     "type": "dialogue",
     "characterId": "player",
-    "text": "我浮出水面，浑身湿透但精神焕发。掌心的晶石碎片与胸前的护身符交相辉映，在我的皮肤表面投下了一片淡淡的蓝色光晕。守护者的虚影已经变得极淡，像是完成了使命即将消散。\"你做出了正确的选择，继承者。带着碎片回到祭坛去吧——将它与护身符结合，你就能重新编织封印的锁链。记住：真正的力量不是占有，而是守护。\"说完这句话，虚影化作千万点星光，消散在了湖面上空。",
-    "screenEffect": "sakura?density=30,color=#aaddff",
-    "effects": ["flashWhite"]
-  },
-  {
-    "sceneId": "secret_cavern",
-    "type": "dialogue",
-    "characterId": "player",
-    "text": "我回到地面时，天色已经微明。掌心的晶石碎片散发着温暖的脉动，与护身符的绿光交相辉映。我站在原地，望着远方祭坛的方向，心中充满了前所未有的清明。我知道该怎么做了一一将碎片嵌入护身符，赶在瓦尔加斯完全突破封印之前，重新锁上那道门。",
-    "effects": [],
-    "screenEffect": "snow?density=15"
+    "texts": [
+      "我浮出水面，浑身湿透但精神焕发。掌心的晶石碎片与胸前的护身符交相辉映，在我的皮肤表面投下了一片淡淡的蓝色光晕。守护者的虚影已经变得极淡，像是完成了使命即将消散。\"你做出了正确的选择，继承者。带着碎片回到祭坛去吧——将它与护身符结合，你就能重新编织封印的锁链。记住：真正的力量不是占有，而是守护。\"说完这句话，虚影化作千万点星光，消散在了湖面上空。",
+      "我回到地面时，天色已经微明。掌心的晶石碎片散发着温暖的脉动，与护身符的绿光交相辉映。我站在原地，望着远方祭坛的方向，心中充满了前所未有的清明。我知道该怎么做了一一将碎片嵌入护身符，赶在瓦尔加斯完全突破封印之前，重新锁上那道门。"
+    ],
+    "textEffects": [
+      null,
+      {"effects": [], "screenEffect": "snow?density=15"}
+    ],
+    "effects": ["flashWhite"],
+    "screenEffect": "sakura?density=30,color=#aaddff"
   },
   {
     "sceneId": "forest_gate",

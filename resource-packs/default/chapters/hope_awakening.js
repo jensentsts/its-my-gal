@@ -109,17 +109,16 @@ export const chapter_hope_awakening = [
     "sceneId": "forest_gate",
     "type": "dialogue",
     "characterId": "player",
-    "text": "我看着她的面庞，在晨光中美得不真实。我本想说什么——也许是道别，也许是承诺——但最终只是微笑着点了点头。有些纽带不需要语言来维系。我低头看向胸前的护身符——它安静地悬挂着，光芒已经完全内敛，像一颗沉睡的种子。它的任务完成了。我和她的故事，在另一个层面上，才刚刚开始。",
+    "texts": [
+      "我看着她的面庞，在晨光中美得不真实。我本想说什么——也许是道别，也许是承诺——但最终只是微笑着点了点头。有些纽带不需要语言来维系。我低头看向胸前的护身符——它安静地悬挂着，光芒已经完全内敛，像一颗沉睡的种子。它的任务完成了。我和她的故事，在另一个层面上，才刚刚开始。",
+      "破碎的迷雾终于完全散去，阳光普照在阿瓦隆的大地上。我用两代人的守护与传承，换来了这一刻——璀璨的破晓之光。"
+    ],
+    "textEffects": [
+      null,
+      {"effects": ["flashWhite"], "screenEffect": "sakura?density=50,color=#ffb7c5"}
+    ],
     "effects": ["dim"],
     "screenEffect": "sakura?density=35,color=#ffd700"
-  },
-  {
-    "sceneId": "forest_gate",
-    "type": "dialogue",
-    "characterId": "player",
-    "text": "破碎的迷雾终于完全散去，阳光普照在阿瓦隆的大地上。我用两代人的守护与传承，换来了这一刻——璀璨的破晓之光。",
-    "effects": ["flashWhite"],
-    "screenEffect": "sakura?density=50,color=#ffb7c5"
   },
   {
     "sceneId": "forest_gate",

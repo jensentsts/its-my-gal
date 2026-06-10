@@ -19,6 +19,25 @@
     <link rel="stylesheet" href="app/styles/effects.css">
     <link rel="stylesheet" href="app/styles/game.css">
     <link rel="stylesheet" href="app/styles/menu.css">
+
+    <script>
+    // 阻止旧版缓存/扩展注入的内容脚本干扰
+    // 捕获并静默处理 classList 等 DOM 属性访问错误
+    window.addEventListener('error', function(e) {
+        if (e.message && e.message.includes('classList')) {
+            console.warn('[Guard] 捕获到 classList 访问错误，可能来自外部脚本:', e.filename);
+            e.preventDefault();
+            return true;
+        }
+    }, true);
+    window.addEventListener('unhandledrejection', function(e) {
+        if (e.reason && e.reason.message && e.reason.message.includes('classList')) {
+            console.warn('[Guard] 捕获到异步 classList 错误，可能来自外部脚本:', e.reason);
+            e.preventDefault();
+            return true;
+        }
+    });
+    </script>
 </head>
 <body>
     <div id="app" v-cloak>
@@ -34,7 +53,43 @@
         <!--  CG 灯箱                                                     -->
         <!-- ============================================================ -->
         <div class="cg-lightbox-modal" :class="{'modal-active': lightboxUrl}" @click="closeLightbox">
-            <img :src="lightboxUrl" class="lightbox-large-img" @click.stop>
+            <img v-if="lightboxUrl && !lightboxError" :src="lightboxUrl" class="lightbox-large-img" @click.stop @error="onLightboxError">
+            <div v-if="lightboxError" class="lightbox-fallback" @click.stop>
+                <span class="lightbox-fallback-icon">🖼️</span>
+                <span class="lightbox-fallback-text">图片加载失败</span>
+                <button class="lightbox-fallback-close" @click="closeLightbox">关闭</button>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!--  自定义对话框                                                 -->
+        <!-- ============================================================ -->
+        <div class="game-dialog-overlay" v-if="dialogState.show" @click.self="closeDialog(null)">
+            <div class="game-dialog-box">
+                <div class="game-dialog-title">{{ dialogState.title }}</div>
+                <div class="game-dialog-message" v-if="dialogState.message">{{ dialogState.message }}</div>
+                <div class="game-dialog-prompt" v-if="dialogState.type === 'prompt'">
+                    <input type="text" v-model="dialogState.promptValue"
+                           :placeholder="dialogState.promptPlaceholder"
+                           class="game-dialog-input"
+                           @keyup.enter="dialogState.confirmDisabled || closeDialog(dialogState.promptValue)" />
+                </div>
+                <div class="game-dialog-buttons">
+                    <button v-if="dialogState.type !== 'alert'"
+                            class="game-dialog-btn cancel"
+                            :class="{ disabled: dialogState.cancelDisabled }"
+                            :disabled="dialogState.cancelDisabled"
+                            @click="closeDialog(null)">
+                        {{ dialogState.cancelText }}
+                    </button>
+                    <button class="game-dialog-btn confirm"
+                            :class="{ disabled: dialogState.confirmDisabled }"
+                            :disabled="dialogState.confirmDisabled"
+                            @click="closeDialog(dialogState.type === 'prompt' ? dialogState.promptValue : true)">
+                        {{ dialogState.confirmText }}
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- ============================================================ -->
@@ -50,6 +105,7 @@
             <div class="menu-container">
                 <h1>{{ configTitle }}</h1>
                 <div class="menu-buttons">
+                    <button v-if="hasExitSave" class="btn btn-continue" @click="continueFromExit">▶ 继续游戏</button>
                     <button class="btn" @click="openArchiveSlotsPanel('load')">从已有存档继续</button>
                     <button class="btn" @click="startNewGame">新的旅程</button>
                     <button class="btn" @click="openCharactersPanel">角色名录</button>
@@ -138,6 +194,7 @@
                     </div>
                 </div>
 
+                <!-- 结局（放在章节之上） -->
                 <div class="ending-gallery-section">
                     <h3>🎬 编年史分歧结局收集</h3>
                     <div class="ending-matrix-grid">
@@ -154,6 +211,44 @@
                                 {{ unlockedEndings[end.id] ? end.description : "在旅程中达成该分歧结局后，将激活此处的时空记录。" }}
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- 章节 -->
+                <div class="ending-gallery-section">
+                    <h3>📖 已启程的篇章</h3>
+                    <div class="ending-matrix-grid">
+                        <div class="ending-card-badge"
+                             v-for="(desc, cid) in chapterDescriptions" :key="cid"
+                             :class="{ unlocked: visitedChapters[cid] }">
+                            <div class="ending-badge-status">
+                                {{ visitedChapters[cid] ? "✅ 已探索" : "🔒 未抵达" }}
+                            </div>
+                            <div class="ending-badge-title">
+                                {{ visitedChapters[cid] ? cid : '???' }}
+                            </div>
+                            <div class="ending-badge-desc">
+                                {{ visitedChapters[cid] ? desc : '在此章节被经历之前，其内容缠绕在命运的迷雾之中。' }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 清除所有记忆（长按按钮） -->
+                <div class="ending-gallery-section" style="border-top: none; padding-top: 10px;">
+                    <div class="clear-memories-container">
+                        <button class="clear-memories-btn"
+                                :class="{ 'clearing': clearHolding }"
+                                @mousedown.prevent="startClearHold"
+                                @mouseup.prevent="cancelClearHold"
+                                @mouseleave.prevent="cancelClearHold"
+                                @touchstart.prevent="startClearHold"
+                                @touchend.prevent="cancelClearHold"
+                                @touchcancel.prevent="cancelClearHold"
+                                ref="clearBtnRef">
+                            <span class="clear-memories-fill" :style="{ width: clearProgress + '%' }"></span>
+                            <span class="clear-memories-text">{{ clearHolding ? '继续按住...' : '🗑️ 清除所有记忆' }}</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -220,7 +315,12 @@
 
                 <!-- CG 叠加层 -->
                 <div class="cg-overlay-viewport" v-if="activeCG" :class="activeCG.animation">
-                    <img :src="activeCG.url" class="cg-img-content" :class="activeCG.effectClass">
+                    <img v-if="activeCG.url" :src="activeCG.url" class="cg-img-content" :class="activeCG.effectClass"
+                         @error="onCGError">
+                    <div v-else class="cg-fallback">
+                        <div class="cg-fallback-icon">🖼️</div>
+                        <div class="cg-fallback-text">CG 资源缺失</div>
+                    </div>
                 </div>
 
                 <!-- 屏幕特效遮罩 -->
@@ -249,8 +349,8 @@
                     <div class="item-toast-close-tip">点击任意区域关闭展示，或等待自动推进队列</div>
                 </div>
 
-                <!-- 角色立绘舞台 -->
-                <div class="stage-container" v-show="uiVisible" :style="{ opacity: uiVisible ? 1 : 0 }">
+                <!-- 角色立绘舞台（始终显示，不受右键隐藏 UI 影响） -->
+                <div class="stage-container">
                     <div v-for="(state, charId) in stageCharacters" :key="charId"
                          class="stage-character" :class="[state.animation, { 'inactive-mask': currentSpeakerId !== charId }]">
                         <img v-if="state.url" :src="state.url" @error="handleSpriteError(charId)" class="character-img">

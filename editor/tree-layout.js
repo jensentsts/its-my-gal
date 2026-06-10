@@ -2,6 +2,19 @@
  * editor/tree-layout.js
  *
  * 剧情树结构分析与自动布局算法 —— 纯函数，不依赖 Vue
+ *
+ * 布局算法（基于 Sugiyama 分层布局思想）：
+ *  1. 提取邻接关系
+ *  2. BFS 分层（layer = y 坐标）
+ *  3. Crossing Minimization —— 通过 barycenter 法调整每层节点顺序，减少连线交叉
+ *  4. 提取"主父节点"树，子节点按 crossing-min 后的层内顺序排列
+ *  5. 自底向上计算子树宽度
+ *  6. 自顶向下分配 x 坐标
+ *  7. 多父节点调整：多父节点取父节点平均 x，偏移整个子树
+ *  8. 孤立节点放在主树下方
+ *
+ * 全程避免依赖对象属性遍历顺序（Object.keys/entries 的插入顺序），
+ * 所有需要排序的地方按节点 ID 字典序或 barycenter 值决定，确保结果可复现。
  */
 
 /**
@@ -12,7 +25,11 @@ export function analyzeTree(chapters) {
     const adjacency = {};   // chapterId → [targetChapterIds]
     const incoming = {};    // chapterId → count (被多少章节引用)
 
-    for (const [cid, steps] of Object.entries(chapters)) {
+    // 按 ID 排序保证确定性
+    const sortedCids = Object.keys(chapters).sort();
+
+    for (const cid of sortedCids) {
+        const steps = chapters[cid];
         if (!adjacency[cid]) adjacency[cid] = [];
         const targets = new Set();
 
@@ -28,22 +45,155 @@ export function analyzeTree(chapters) {
             }
         }
 
-        adjacency[cid] = [...targets];
+        // 排序 targets 保证 adjacency 顺序确定
+        adjacency[cid] = [...targets].sort();
         for (const t of targets) {
             incoming[t] = (incoming[t] || 0) + 1;
         }
     }
 
-    const allIds = Object.keys(chapters);
+    const allIds = Object.keys(adjacency).sort();
     const roots = allIds.filter(id => !incoming[id]);
-    const leaves = allIds.filter(id => adjacency[id] && adjacency[id].length === 0);
 
+    // 确保 'main' 总是第一个根
     if (roots.includes('main')) {
         roots.splice(roots.indexOf('main'), 1);
         roots.unshift('main');
     }
 
+    const leaves = allIds.filter(id => adjacency[id] && adjacency[id].length === 0);
+
     return { adjacency, incoming, roots, leaves };
+}
+
+/**
+ * 获取节点的所有父节点（上层有边指向本节点的节点）
+ */
+function getParents(nodeId, adjacency, layerOf) {
+    const parents = [];
+    const nodeLayer = layerOf[nodeId];
+    if (nodeLayer === undefined) return parents;
+    for (const [p, targets] of Object.entries(adjacency)) {
+        if (p === nodeId) continue;
+        const pLayer = layerOf[p];
+        if (pLayer === undefined) continue;
+        if (pLayer >= nodeLayer) continue;
+        if (targets.includes(nodeId)) {
+            parents.push(p);
+        }
+    }
+    return parents.sort(); // 按 ID 排序保证确定性
+}
+
+/**
+ * 获取节点的所有子节点（下层本节点有边指向的节点）
+ */
+function getChildren(nodeId, adjacency, layerOf) {
+    const children = [];
+    const nodeLayer = layerOf[nodeId];
+    if (nodeLayer === undefined) return children;
+    for (const t of (adjacency[nodeId] || [])) {
+        if (t === nodeId) continue;
+        const tLayer = layerOf[t];
+        if (tLayer === undefined) continue;
+        if (tLayer <= nodeLayer) continue;
+        children.push(t);
+    }
+    return children.sort(); // 按 ID 排序保证确定性
+}
+
+/**
+ * Crossing Minimization —— 使用 Barycenter 启发式方法
+ *
+ * 在每层内部反复调整节点顺序，使得连线的总交叉数最小化。
+ * 策略：
+ *  - 初始顺序按节点 ID 字典序（确定且与存储无关）
+ *  - 自上而下：子节点按所有父节点在当前层的位置均值排序
+ *  - 自下而上：父节点按所有子节点在当前层的位置均值排序
+ *  - 迭代 4 轮收敛
+ *
+ * @param {Array<Array<string>>} layers - layers[l] = [nodeId, ...]
+ * @param {Object} adjacency
+ * @param {Object} layerOf - nodeId → layer
+ * @returns {Array<Array<string>>} 重排后的 layers
+ */
+function minimizeCrossings(layers, adjacency, layerOf) {
+    // 过滤可能为 undefined 的层，确保安全
+    const safeLayers = layers.filter(Boolean);
+    if (safeLayers.length <= 1) return safeLayers.map(l => [...l].sort());
+
+    // 深拷贝 layers，初始按节点 ID 排序（确定性）
+    const result = safeLayers.map(l => [...l].sort());
+    const nLayers = result.length;
+
+    for (let iter = 0; iter < 4; iter++) {
+        // ── 自上而下 ──
+        for (let l = 1; l < nLayers; l++) {
+            const currentLayer = result[l];
+            const prevLayer = result[l - 1];
+            if (!currentLayer || !prevLayer || currentLayer.length <= 1) continue;
+
+            const indexed = currentLayer.map(nodeId => {
+                const parents = getParents(nodeId, adjacency, layerOf);
+                let bary = 0;
+                if (parents.length > 0) {
+                    const positions = parents
+                        .map(p => prevLayer.indexOf(p))
+                        .filter(idx => idx >= 0);
+                    if (positions.length > 0) {
+                        bary = positions.reduce((a, b) => a + b, 0) / positions.length;
+                    } else {
+                        // 没有父节点在当前层，取中间位置
+                        bary = (prevLayer.length - 1) / 2;
+                    }
+                } else {
+                    // 孤立节点在这层，取中间位置
+                    bary = (prevLayer.length - 1) / 2;
+                }
+                return { nodeId, bary };
+            });
+
+            // 按 barycenter 排序，并列时按 nodeId 字典序
+            indexed.sort((a, b) => {
+                if (a.bary !== b.bary) return a.bary - b.bary;
+                return a.nodeId.localeCompare(b.nodeId);
+            });
+            result[l] = indexed.map(x => x.nodeId);
+        }
+
+        // ── 自下而上 ──
+        for (let l = nLayers - 2; l >= 0; l--) {
+            const currentLayer = result[l];
+            const nextLayer = result[l + 1];
+            if (!currentLayer || !nextLayer || currentLayer.length <= 1) continue;
+
+            const indexed = currentLayer.map(nodeId => {
+                const children = getChildren(nodeId, adjacency, layerOf);
+                let bary = 0;
+                if (children.length > 0) {
+                    const positions = children
+                        .map(c => nextLayer.indexOf(c))
+                        .filter(idx => idx >= 0);
+                    if (positions.length > 0) {
+                        bary = positions.reduce((a, b) => a + b, 0) / positions.length;
+                    } else {
+                        bary = (nextLayer.length - 1) / 2;
+                    }
+                } else {
+                    bary = (nextLayer.length - 1) / 2;
+                }
+                return { nodeId, bary };
+            });
+
+            indexed.sort((a, b) => {
+                if (a.bary !== b.bary) return a.bary - b.bary;
+                return a.nodeId.localeCompare(b.nodeId);
+            });
+            result[l] = indexed.map(x => x.nodeId);
+        }
+    }
+
+    return result;
 }
 
 /**
@@ -51,23 +201,25 @@ export function analyzeTree(chapters) {
  *
  * 算法：
  *  1. BFS 分层（layer = y 坐标）
- *  2. 提取"主父节点"树
- *  3. 自底向上计算子树宽度
- *  4. 自顶向下分配 x 坐标
- *  5. 多父节点调整
- *  6. 孤立节点放在主树下方
+ *  2. Crossing Minimization（barycenter 法，减少连线交叉）
+ *  3. 提取"主父节点"树（多父节点取层数最浅的那个）
+ *  4. 子节点按 crossing-min 后的层内顺序排列
+ *  5. 自底向上计算子树宽度
+ *  6. 自顶向下分配 x 坐标（子节点在其父节点下居中排列）
+ *  7. 多父节点调整：有多个父节点的子节点，在父节点间取平均 x
+ *  8. 孤立节点放在主树下方
  */
 export function computeLayout(chapters, nodeSizes = {}) {
     const { adjacency, roots } = analyzeTree(chapters);
-    const allIds = Object.keys(chapters);
+    const allIds = Object.keys(adjacency).sort();
     if (allIds.length === 0) return {};
 
     // ── 常量 ──────────────────────────────────────────────────────
     const DEFAULT_W = 200;
     const DEFAULT_H = 90;
-    const H_GAP = 40;
-    const V_GAP = 80;
-    const MIN_LAYER_GAP = 30;
+    const H_GAP = 40;       // 兄弟子树之间的水平间距
+    const V_GAP = 80;       // 层间垂直间距
+    const MIN_LAYER_GAP = 30; // 不同根子树之间的额外间距
     const ORIGIN_X = 300;
     const ORIGIN_Y = 80;
 
@@ -75,8 +227,8 @@ export function computeLayout(chapters, nodeSizes = {}) {
     function nodeH(id) { return nodeSizes[id]?.height || DEFAULT_H; }
 
     // ── 1. BFS 分层 ──────────────────────────────────────────────
-    const layerOf = {};
-    const layers = [];
+    const layerOf = {};    // id → 层号（从上到下 0,1,2…）
+    const layers = [];     // layers[layer] = [id, …]
     const visited = new Set();
     const queue = [];
 
@@ -96,7 +248,7 @@ export function computeLayout(chapters, nodeSizes = {}) {
             if (t === cur) continue;
             const nl = l + 1;
             if (nl > allIds.length + 5) continue;
-            if (!visited.has(t) || (layerOf[t] < nl)) {
+            if (!visited.has(t) || layerOf[t] < nl) {
                 layerOf[t] = nl;
                 visited.add(t);
                 queue.push(t);
@@ -104,6 +256,7 @@ export function computeLayout(chapters, nodeSizes = {}) {
         }
     }
 
+    // 孤立节点（未被 BFS 遍历到的）放到最后一层之后
     const orphans = [];
     for (const id of allIds) {
         if (!visited.has(id)) {
@@ -111,10 +264,18 @@ export function computeLayout(chapters, nodeSizes = {}) {
             layerOf[id] = layers.length;
         }
     }
+    orphans.sort(); // 按 ID 排序保证确定性
 
-    // ── 2. 构建主父节点树 ────────────────────────────────────────
-    const primaryParent = {};
-    const children = {};
+    // ── 2. Crossing Minimization ──────────────────────────────────
+    // 重新组织每层内节点顺序，使连线尽可能不交叉
+    for (let l = 0; l < layers.length; l++) {
+        if (!layers[l]) layers[l] = [];
+    }
+    const orderedLayers = minimizeCrossings(layers, adjacency, layerOf);
+
+    // ── 3. 构建主父节点树 ────────────────────────────────────────
+    const primaryParent = {}; // childId → parentId
+    const children = {};      // parentId → [childId, …]
 
     for (const [parent, targets] of Object.entries(adjacency)) {
         if (layerOf[parent] === undefined) continue;
@@ -127,12 +288,35 @@ export function computeLayout(chapters, nodeSizes = {}) {
             }
         }
     }
+
+    // ── 4. 子节点按 crossing-min 后的层内顺序排序 ────────────────
+    // 这样兄弟节点在最终布局中的左右顺序与 crossing minimization 的结果一致
+    const childOrder = {}; // parentId → [childId, …] (排序后)
     for (const [child, parent] of Object.entries(primaryParent)) {
+        if (!childOrder[parent]) childOrder[parent] = [];
+        childOrder[parent].push(child);
+    }
+    for (const parent of Object.keys(childOrder)) {
+        const parentLayer = layerOf[parent];
+        if (parentLayer === undefined || parentLayer + 1 >= orderedLayers.length) {
+            // 子节点按 ID 排序
+            childOrder[parent].sort();
+        } else {
+            const nextLayerOrder = orderedLayers[parentLayer + 1];
+            childOrder[parent].sort((a, b) => {
+                const ia = nextLayerOrder.indexOf(a);
+                const ib = nextLayerOrder.indexOf(b);
+                if (ia >= 0 && ib >= 0) return ia - ib;
+                if (ia >= 0) return -1;
+                if (ib >= 0) return 1;
+                return a.localeCompare(b);
+            });
+        }
         if (!children[parent]) children[parent] = [];
-        children[parent].push(child);
+        children[parent] = childOrder[parent];
     }
 
-    // ── 3. 自底向上计算子树宽度 ──────────────────────────────────
+    // ── 5. 自底向上计算子树宽度 ──────────────────────────────────
     const subtreeW = {};
 
     function calcSubtree(id) {
@@ -155,7 +339,7 @@ export function computeLayout(chapters, nodeSizes = {}) {
     for (const id of allIds) calcSubtree(id);
     for (const id of orphans) calcSubtree(id);
 
-    // ── 4. 自顶向下分配 x 坐标 ────────────────────────────────────
+    // ── 6. 自顶向下分配 x 坐标 ────────────────────────────────────
     const xPos = {};
 
     function assignX(id, centerX) {
@@ -184,7 +368,7 @@ export function computeLayout(chapters, nodeSizes = {}) {
         rootCurX += subtreeW[r] + H_GAP + MIN_LAYER_GAP;
     }
 
-    // ── 5. 多父节点调整 ──────────────────────────────────────────
+    // ── 7. 多父节点调整 ──────────────────────────────────────────
     {
         const mpTarget = {};
         for (const [child] of Object.entries(primaryParent)) {
@@ -211,13 +395,15 @@ export function computeLayout(chapters, nodeSizes = {}) {
             for (const k of (children[id] || [])) mpShift(k, delta);
         }
 
-        for (const [child, targetX] of Object.entries(mpTarget)) {
+        // 按 child ID 排序确保多父节点调整顺序确定
+        const sortedMP = Object.entries(mpTarget).sort((a, b) => a[0].localeCompare(b[0]));
+        for (const [child, targetX] of sortedMP) {
             const delta = targetX - xPos[child];
             mpShift(child, delta);
         }
     }
 
-    // ── 6. 孤立节点定位 ──────────────────────────────────────────
+    // ── 8. 孤立节点定位 ──────────────────────────────────────────
     if (orphans.length > 0) {
         let orphanY = layers.length;
         if (roots.length === 0) orphanY = 0;
@@ -237,7 +423,7 @@ export function computeLayout(chapters, nodeSizes = {}) {
         }
     }
 
-    // ── 7. 转换为最终坐标 ────────────────────────────────────────
+    // ── 9. 转换为最终坐标 ────────────────────────────────────────
     const positions = {};
 
     let minX = Infinity;
@@ -330,8 +516,9 @@ export function computeEndingLayout(chapters, endings, chapterPositions, nodeSiz
         positions['_end_' + end.id] = { x: sumX / count, y: ROW1_Y };
         referencedIds.push(end.id);
     }
+    referencedIds.sort();
 
-    const unreferenced = endings.filter(e => !referencedIds.includes(e.id));
+    const unreferenced = endings.filter(e => !referencedIds.includes(e.id)).sort((a, b) => a.id.localeCompare(b.id));
     if (unreferenced.length > 0) {
         const row1H = referencedIds.length > 0
             ? Math.max(...referencedIds.map(e => endH('_end_' + e)))

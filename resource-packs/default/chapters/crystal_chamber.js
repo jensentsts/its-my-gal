@@ -1,36 +1,30 @@
 /**
  * resource-packs/default/chapters/crystal_chamber.js
  *
- * Auto-converted from crystal_chamber.json
+ * 水晶密室 —— 使用 texts 批处理优化。
  */
 export const chapter_crystal_chamber = [
   {
     "sceneId": "forest_path",
     "type": "dialogue",
     "characterId": "player",
-    "text": "在瓦尔加斯那番话之后，一种强烈的不安感攫住了我。我本能地感觉到，硬碰硬绝不是正确的选择。我需要更多的信息——关于这片森林真正的力量来源。爱莉希雅曾经提到过，森林的魔力不仅仅来自封印，还有更深层的源头。",
+    "texts": [
+      "在瓦尔加斯那番话之后，一种强烈的不安感攫住了我。我本能地感觉到，硬碰硬绝不是正确的选择。我需要更多的信息——关于这片森林真正的力量来源。爱莉希雅曾经提到过，森林的魔力不仅仅来自封印，还有更深层的源头。",
+      "我回想起祖父日志中夹着的那张泛黄的手绘地图——在森林腹地，离祭坛大约半日路程的地方，标记了一个奇特的符号。那不是精灵的文字，也不是魔族的印记，而是一个我从未见过的图案：一颗被藤蔓缠绕的菱形晶石。祖父在旁边用铅笔写着：\"真正的钥匙。\"",
+      "瓦尔加斯的注意力还集中在爱莉希雅身上——他的意识主体已经侵入了她的灵魂深处，对外界的感知暂时变弱了。这是我的机会。我紧握着护身符，循着地图上的标记，向着森林极深处悄然前行。越往里走，雾气越稀薄，取而代之的是一种奇异的、温暖的晶蓝色光芒，从岩石的缝隙中透射出来。"
+    ],
+    "textEffects": [
+      null,
+      {"effects": ["vignette"]},
+      {"effects": [], "screenEffect": "stardust?density=25"}
+    ],
     "effects": ["dim"]
   },
   {
     "sceneId": "forest_path",
     "type": "dialogue",
     "characterId": "player",
-    "text": "我回想起祖父日志中夹着的那张泛黄的手绘地图——在森林腹地，离祭坛大约半日路程的地方，标记了一个奇特的符号。那不是精灵的文字，也不是魔族的印记，而是一个我从未见过的图案：一颗被藤蔓缠绕的菱形晶石。祖父在旁边用铅笔写着：\"真正的钥匙。\"",
-    "effects": ["vignette"]
-  },
-  {
-    "sceneId": "forest_path",
-    "type": "dialogue",
-    "characterId": "player",
-    "text": "瓦尔加斯的注意力还集中在爱莉希雅身上——他的意识主体已经侵入了她的灵魂深处，对外界的感知暂时变弱了。这是我的机会。我紧握着护身符，循着地图上的标记，向着森林极深处悄然前行。越往里走，雾气越稀薄，取而代之的是一种奇异的、温暖的晶蓝色光芒，从岩石的缝隙中透射出来。",
-    "screenEffect": "stardust?density=25",
-    "effects": []
-  },
-  {
-    "sceneId": "forest_path",
-    "type": "dialogue",
-    "characterId": "player",
-    "text": "穿过一片被藤蔓掩蔽的石拱门后，我来到了一处从未在地面上见过的景象：一面如镜的深潭嵌在参天古树的环抱之中，水面静止得仿佛凝固了时间。潭水深处隐约可见一块巨大的、多面体的晶石——它缓缓地旋转着，每一次转动都向四周散发出涟漪般的魔力波动。",
+    "text": "穿过一片被藤蔓遮蔽的石拱门后，我来到了一处从未在地面上见过的景象：一面如镜的深潭嵌在参天古树的环抱之中，水面静止得仿佛凝固了时间。潭水深处隐约可见一块巨大的、多面体的晶石——它缓缓地旋转着，每一次转动都向四周散发出涟漪般的魔力波动。",
     "cgChanges": {"action": "enter", "id": "redemption_light", "animation": "scaleIn"},
     "screenEffect": "stardust?density=40",
     "effects": ["flashWhite"]

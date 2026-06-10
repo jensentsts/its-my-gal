@@ -1,25 +1,23 @@
 /**
  * resource-packs/default/chapters/main.js
  *
- * Auto-converted from main.json
+ * 序章 —— 使用 texts 批处理优化。
  */
 export const chapter_main = [
   {
     "sceneId": "tavern_interior",
     "type": "dialogue",
     "characterId": "player",
-    "text": "深夜的酒馆终于安静了下来。窗外的雨丝斜斜地打在玻璃上，把远处街灯的昏黄光线揉成一片模糊。我叫安文，今年二十四岁，在一家不起眼的旧书店打工。日子过得平平淡淡，直到今晚。",
-    "effects": [
-      "vignette"
+    "texts": [
+      "深夜的酒馆终于安静了下来。窗外的雨丝斜斜地打在玻璃上，把远处街灯的昏黄光线揉成一片模糊。我叫安文，今年二十四岁，在一家不起眼的旧书店打工。日子过得平平淡淡，直到今晚。",
+      "房东催了我三次房租，手机里躺着三条未读的消息——一条是大学同学王明发来的聚会邀请，一条是书店老板问我明天能不能替班。我都没回。因为此刻，我手里正捏着祖父留给我的唯一遗物——那本厚重的航海日志。"
     ],
+    "textEffects": [
+      null,
+      {"effects": []}
+    ],
+    "effects": ["vignette"],
     "screenEffect": "rain?density=25,speed=40,wind=0.3"
-  },
-  {
-    "sceneId": "tavern_interior",
-    "type": "dialogue",
-    "characterId": "player",
-    "text": "房东催了我三次房租，手机里躺着三条未读的消息——一条是大学同学王明发来的聚会邀请，一条是书店老板问我明天能不能替班。我都没回。因为此刻，我手里正捏着祖父留给我的唯一遗物——那本厚重的航海日志。",
-    "effects": []
   },
   {
     "sceneId": "tavern_interior",

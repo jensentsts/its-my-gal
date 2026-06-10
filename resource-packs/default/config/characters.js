@@ -40,12 +40,12 @@ export const CHARACTERS = {
       "possessed": "assets/characters/elysia/avatar_possessed.jpg"
     },
     "sprites": {
-      "idle": { "id": "idle", "url": "assets/characters/elysia/sprites/normal.png", "label": "🍃 警惕冷漠" },
-      "happy": { "id": "happy", "url": "assets/characters/elysia/sprites/normal.png", "label": "✨ 释怀微笑" },
-      "shock": { "id": "shock", "url": "assets/characters/elysia/sprites/normal.png", "label": "💢 惊愕愤怒" },
-      "sad": { "id": "sad", "url": "assets/characters/elysia/sprites/normal.png", "label": "💧 情绪低落" },
-      "determined": { "id": "determined", "url": "assets/characters/elysia/sprites/normal.png", "label": "⚔️ 决然迎战" },
-      "possessed": { "id": "possessed", "url": "assets/characters/elysia/sprites/possessed.png", "label": "🌑 被附身·暗影瞳" }
+      "idle": { "id": "idle", "url": "assets/characters/elysia/sprites/idle.png", "label": "🍃 警惕冷漠" },
+      "happy": { "id": "happy", "url": "assets/characters/elysia/sprites/idle.png", "label": "✨ 释怀微笑" },
+      "shock": { "id": "shock", "url": "assets/characters/elysia/sprites/idle.png", "label": "💢 惊愕愤怒" },
+      "sad": { "id": "sad", "url": "assets/characters/elysia/sprites/idle.png", "label": "💧 情绪低落" },
+      "determined": { "id": "determined", "url": "assets/characters/elysia/sprites/idle.png", "label": "⚔️ 决然迎战" },
+      "possessed": { "id": "possessed", "url": "assets/characters/elysia/sprites/normal.png", "label": "🌑 被附身·暗影瞳" }
     }
   },
   "vargas": {

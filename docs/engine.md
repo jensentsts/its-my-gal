@@ -100,7 +100,19 @@ typingFinished    — 打字机是否完成
 - 16 个存档槽位
 - 自动生成存档时间戳
 - 画廊 / 结局成就持久化（独立 key）
+- 已游览章节跟踪（独立 key `gal_chapters_visited`）
 - 存档数据包含完整状态快照
+
+**画廊 / 结局 / 章节成就 API：**
+
+| 方法 | 说明 |
+|------|------|
+| `getGallery()` | 获取已解锁 CG 图鉴 `{ cgId: true }` |
+| `unlockGallery(id)` | 解锁 CG |
+| `getEndings()` | 获取已解锁结局 `{ endingId: true }` |
+| `unlockEnding(id)` | 解锁结局 |
+| `getVisitedChapters()` | 获取已游览章节 `{ chapterId: { visitedAt } }` |
+| `visitChapter(id)` | 记录章节已游览 |
 
 ## 步骤类型 (Step Types)
 
