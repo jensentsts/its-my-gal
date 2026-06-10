@@ -675,6 +675,28 @@ createApp({
             }
             engineCtx.loadSaveSlots();
             engineCtx.initHomeEffects(resolveData('HOME_CONFIG'));
+
+            // 资源完整性校验（非阻塞，后台执行）
+            nextTick(() => {
+                engineCtx.validateResourceIntegrity().then(ok => {
+                    if (!ok && engineCtx.resourceIssues.value.length > 0) {
+                        const issues = engineCtx.resourceIssues.value;
+                        const list = issues.map(i => `  · [${i.type}] ${i.path}`).join('\n');
+                        engineCtx.showDialog({
+                            type: 'confirm',
+                            title: '资源文件缺失',
+                            message: `发现 ${issues.length} 个资源文件无法加载，可能影响游戏体验。\n\n${list}\n\n是否继续游戏？`,
+                            confirmText: '继续游戏',
+                            cancelText: '返回检查',
+                        }).then(result => {
+                            if (result !== true) {
+                                // 用户选择返回，留在此界面
+                                console.warn('[资源校验] 用户选择返回检查');
+                            }
+                        });
+                    }
+                });
+            });
         });
 
         onUnmounted(() => {

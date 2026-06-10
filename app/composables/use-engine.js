@@ -17,7 +17,8 @@ import { GalEngine, EffectsManager, ResourceManager,
          DEFAULT_ITEM_ANIMATION_PRESETS,
          ChapterLoader,
          extractBranchPoints,
-         rankNextChapters } from '../../engine/index.js';
+         rankNextChapters,
+         ResourcePathResolver } from '../../engine/index.js';
 export function useEngine() {
     // ---- 引擎实例 ----
     const engine = Vue.ref(null);
@@ -140,6 +141,11 @@ export function useEngine() {
     const lightboxUrl              = Vue.ref('');
     const lightboxError            = Vue.ref(false);
 
+    // 资源完整性
+    const resourceIssues           = Vue.ref([]);    // { type, path, context }[]
+    const resourceValidationDone   = Vue.ref(false);
+    const resourcePathResolver     = new ResourcePathResolver();
+
     // ---- 从编辑器 localStorage 加载同步数据 ----
     function loadEditorData() {
         try {
@@ -151,6 +157,32 @@ export function useEngine() {
             return data;
         } catch {
             return null;
+        }
+    }
+
+    // ---- 资源完整性校验 ----
+    /**
+     * 扫描当前加载的游戏数据，验证所有资源文件是否存在，
+     * 结果写入 resourceIssues.value。
+     * @param {Object} [gd] 游戏数据（默认使用 gameData.value）
+     * @returns {Promise<boolean>} true=全部完整
+     */
+    async function validateResourceIntegrity(gd) {
+        const data = gd || gameData.value;
+        if (!data) { resourceValidationDone.value = true; return true; }
+        try {
+            const result = await resourcePathResolver.validateAll(data);
+            resourceIssues.value = result.missing;
+            resourceValidationDone.value = true;
+            if (result.missing.length > 0) {
+                console.warn('[资源校验] 发现 ' + result.missing.length + ' 个缺失资源:',
+                    result.missing.map(m => m.path));
+            }
+            return result.ok;
+        } catch (e) {
+            console.error('[资源校验] 校验过程异常:', e);
+            resourceValidationDone.value = true;
+            return false;
         }
     }
 
@@ -870,8 +902,10 @@ export function useEngine() {
         sceneBgFailed, currentSceneTestUrl,
         showLog, showInventory,
         activeInspectedCharId, activeSpriteIdForInspection, activeInspectedSpriteUrl, lightboxUrl, lightboxError,
+        resourceIssues, resourceValidationDone, resourcePathResolver,
         dialogState, showDialog, closeDialog,
         // 方法
+        validateResourceIntegrity,
         initEngine, loadEditorData, loadPackFromPath, importPackFromZip,
         getPackMeta, isPackLoaded,
         exportCurrentAsPack, exportCurrentAsZip,

@@ -12,7 +12,7 @@
  */
 
 import * as GameData from '../resource-packs/default/index.js';
-import { ResourceManager, validatePackStructure, validatePackData, EffectsManager } from '../engine/index.js';
+import { ResourceManager, validatePackStructure, validatePackData, EffectsManager, ResourcePathResolver } from '../engine/index.js';
 import { analyzeTree, computeLayout, computeEndingLayout, computeEdgePath } from './tree-layout.js';
 
 const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
@@ -116,6 +116,9 @@ createApp({
 
         // ── 章节简介 ─────────────────────────────────────────────────
         const chapterDescriptions = reactive(clone(GameData.CHAPTER_DESCRIPTIONS || {})); // { [chapterId]: "简介文本" }
+
+        // ── 资源路径解析器 ────────────────────────────────────────────
+        const editorPathResolver = new ResourcePathResolver();
 
         // ── 入口节点（package 可以有多个入口，但执行时指定唯一入口） ────
         // 默认入口为 'main'
@@ -1396,6 +1399,28 @@ createApp({
             showToast('✅ 游戏设置已保存！请点击"同步到游戏"使引擎生效。');
         }
 
+        // ── 资源完整性校验（编辑器内手动触发） ──────────────────────────
+        async function validateEditorResources() {
+            const data = {
+                CHARACTERS: gameCharacters,
+                SCENES: gameScenes,
+                CG_LIBRARY: gameCgLibrary,
+                HOME_CONFIG: gameConfig?.home || gameConfig,
+            };
+            try {
+                const result = await editorPathResolver.validateAll(data);
+                if (result.ok) {
+                    showToast('✅ 所有资源文件完整，共检查 ' + result.missing.length + ' 项');
+                } else {
+                    const msg = result.missing.map(m => `  · [${m.type}] ${m.path}`).join('\n');
+                    showToast(`⚠️ 发现 ${result.missing.length} 个缺失资源（控制台查看详情）`);
+                    console.warn('缺失资源列表:\n' + msg);
+                }
+            } catch (e) {
+                showToast('❌ 校验过程异常: ' + e.message);
+            }
+        }
+
         // ── 同步到游戏引擎 ──────────────────────────────────────────────
         function syncToGame() {
             try {
@@ -1506,14 +1531,19 @@ createApp({
         function addSprite(character) {
             if (!character.sprites) character.sprites = {};
             const spriteId = 'sprite_' + Date.now().toString(36);
-            character.sprites[spriteId] = { id: spriteId, label: '新立绘', url: '' };
+            // 从角色ID + 立绘ID 自动生成路径（拼图式构建）
+            const charId = Object.keys(gameCharacters).find(cid => gameCharacters[cid] === character);
+            const autoUrl = charId ? editorPathResolver.sprite(charId, spriteId) : '';
+            character.sprites[spriteId] = { id: spriteId, label: '新立绘', url: autoUrl };
         }
 
         /** 为角色添加头像 */
         function addAvatar(character) {
             if (!character.avatars) character.avatars = {};
             const avatarId = 'avatar_' + Date.now().toString(36);
-            character.avatars[avatarId] = '';
+            const charId = Object.keys(gameCharacters).find(cid => gameCharacters[cid] === character);
+            const autoUrl = charId ? editorPathResolver.avatar(charId, avatarId) : '';
+            character.avatars[avatarId] = autoUrl;
         }
 
         // ── 曲线（边）交互 ────────────────────────────────────────────
@@ -3390,8 +3420,9 @@ createApp({
             openEffectsManager, addCustomEffect, deleteCustomEffect,
             getEffectIcon, toggleEffectPreview, stopEffectPreview,
             exportPackZipWithAssets,
-            // 同步
+            // 同步 & 校验
             syncToGame, previewStory,
+            editorPathResolver, validateEditorResources,
         };
     }
 }).mount('#editor-app');

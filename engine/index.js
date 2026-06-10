@@ -37,6 +37,7 @@ export { CustomEffectLoader } from './effects/custom-effect-loader.js';
 export { ResourceManager } from './resource/resource-manager.js';
 export { validatePackStructure, validatePackData } from './resource/pack-validator.js';
 export { getDynamicItemDescription, getItemIcon, getItemImage, getItemName, DEFAULT_ITEM_ANIMATION_PRESETS } from './resource/item-helpers.js';
+export { ResourcePathResolver } from './resource/resource-path-resolver.js';
 
 // 故事系统（分支预测 + 懒加载）
 export {
