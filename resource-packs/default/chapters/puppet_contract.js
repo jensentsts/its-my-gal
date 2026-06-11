@@ -85,7 +85,7 @@ export const chapter_puppet_contract = [
   },
   {
     "sceneId": "altar_core",
-    "type": "ending",
+    "type": "jump",
     "endingId": "trap_end"
   }
 ];

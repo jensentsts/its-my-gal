@@ -85,7 +85,7 @@ export const chapter_crystal_retrieval = [
   },
   {
     "sceneId": "forest_gate",
-    "type": "ending",
+    "type": "jump",
     "endingId": "true_end"
   }
 ];

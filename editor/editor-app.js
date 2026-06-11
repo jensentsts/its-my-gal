@@ -182,6 +182,40 @@ createApp({
         const selection = reactive({ active: false, startX: 0, startY: 0, endX: 0, endY: 0 });
         const selectedNodeIds = reactive({}); // { [nodeId]: true }
 
+        // ── 统一选择管理器 ──────────────────────────────────────────────
+        /** 清除所有选中状态 */
+        function clearSelection() {
+            selectedChapterId.value = null;
+            selectedEndingId.value = null;
+            selectedGroupId.value = null;
+            selectedEdge.value = null;
+            editingStepIndex.value = null;
+            clearNodeSelection();
+        }
+
+        /** 获取当前选中的主要对象类型 */
+        function getSelection() {
+            if (selectedNodeIds && Object.keys(selectedNodeIds).length > 0)
+                return { type: 'nodes', ids: Object.keys(selectedNodeIds) };
+            if (selectedChapterId.value) return { type: 'chapter', id: selectedChapterId.value };
+            if (selectedEndingId.value) return { type: 'ending', id: selectedEndingId.value };
+            if (selectedEdge.value) return { type: 'edge', from: selectedEdge.value.from, to: selectedEdge.value.to };
+            if (selectedGroupId.value) return { type: 'group', id: selectedGroupId.value };
+            return null;
+        }
+
+        /** 统一选择调度 */
+        function selectObject(type, id, extra) {
+            clearSelection();
+            switch (type) {
+                case 'chapter': selectedChapterId.value = id; break;
+                case 'ending': selectedEndingId.value = id; break;
+                case 'edge': selectedEdge.value = extra || id; break;
+                case 'group': selectedGroupId.value = id; break;
+                default: break;
+            }
+        }
+
         // 右键菜单状态
         const contextMenu = reactive({ show: false, x: 0, y: 0, nodeId: null, groupId: null, worldX: 0, worldY: 0 });
 
@@ -307,6 +341,12 @@ createApp({
         function resEditAddStep() {
             const id = selectedResourceId.value;
             if (!id || !chapters[id]) return;
+            // 如果末尾步骤已锁定，不可在其前插入
+            const lastIdx = chapters[id].length - 1;
+            if (lastIdx >= 0 && isStepEditLocked(chapters[id][lastIdx])) {
+                showToast('⚠ 末尾步骤已锁定，无法添加新步骤');
+                return;
+            }
             saveUndoSnapshot();
             chapters[id].push({
                 sceneId: '',
@@ -321,6 +361,7 @@ createApp({
             if (resEditStepIndex.value === null || !selectedResourceId.value) return;
             const steps = chapters[selectedResourceId.value];
             if (!steps || resEditStepIndex.value >= steps.length) return;
+            if (isStepEditLocked(steps[resEditStepIndex.value])) { showToast('⚠ 此步骤已锁定，无法删除'); return; }
             saveUndoSnapshot();
             steps.splice(resEditStepIndex.value, 1);
             if (resEditStepIndex.value >= steps.length) {
@@ -334,6 +375,9 @@ createApp({
             const from = resEditStepIndex.value;
             const to = from + delta;
             if (to < 0 || to >= steps.length) return;
+            if (isStepEditLocked(steps[from]) || isStepEditLocked(steps[to])) {
+                showToast('⚠ 步骤已锁定，无法移动'); return;
+            }
             saveUndoSnapshot();
             const [moved] = steps.splice(from, 1);
             steps.splice(to, 0, moved);
@@ -341,18 +385,18 @@ createApp({
         }
         function resEditAddChoice() {
             const step = resEditStep.value;
-            if (!step || step.type !== 'choice') return;
+            if (!step || isStepEditLocked(step) || step.type !== 'choice') return;
             if (!step.choices) step.choices = [];
             step.choices.push({ text: '新选项...', jumpChapter: '', flag: '', gainItem: '' });
         }
         function resEditRemoveChoice(ci) {
             const step = resEditStep.value;
-            if (!step?.choices) return;
+            if (!step || isStepEditLocked(step) || !step.choices) return;
             step.choices.splice(ci, 1);
         }
         function resEditOnCGChange() {
             const step = resEditStep.value;
-            if (!step) return;
+            if (!step || isStepEditLocked(step)) return;
             const action = step._cgAction;
             if (action === 'enter') {
                 step.cgChanges = { action: 'enter', id: step._cgId || '', animation: step._cgAnimation || 'scaleIn' };
@@ -365,20 +409,20 @@ createApp({
         }
         function resEditAddCharChange() {
             const step = resEditStep.value;
-            if (!step) return;
+            if (!step || isStepEditLocked(step)) return;
             if (!step._charChanges) step._charChanges = [];
             step._charChanges.push({ id: '', action: 'enter', spriteId: '', animation: '' });
             resEditSyncCharChanges();
         }
         function resEditRemoveCharChange(cci) {
             const step = resEditStep.value;
-            if (!step?._charChanges) return;
+            if (!step || isStepEditLocked(step) || !step._charChanges) return;
             step._charChanges.splice(cci, 1);
             resEditSyncCharChanges();
         }
         function resEditSyncCharChanges() {
             const step = resEditStep.value;
-            if (!step) return;
+            if (!step || isStepEditLocked(step)) return;
             const valid = (step._charChanges || []).filter(cc => cc.id);
             if (valid.length > 0) {
                 step.characterChanges = valid.map(cc => ({
@@ -393,32 +437,33 @@ createApp({
         function resEditOnCharChangeField() { resEditSyncCharChanges(); }
         function resEditAddBatchTextSegment() {
             const step = resEditStep.value;
-            if (!step) return;
+            if (!step || isStepEditLocked(step)) return;
             if (!step.texts) step.texts = [step.text || ''];
             step.texts.push('新段落...');
         }
         function resEditRemoveBatchTextSegment(ti) {
             const step = resEditStep.value;
-            if (!step?.texts || step.texts.length <= 1) return;
+            if (!step || isStepEditLocked(step) || !step.texts || step.texts.length <= 1) return;
             step.texts.splice(ti, 1);
             step.text = step.texts[0];
         }
         function resEditDisableBatchText() {
             const step = resEditStep.value;
-            if (!step?.texts) return;
+            if (!step || isStepEditLocked(step) || !step.texts) return;
             step.text = step.texts[0] || '';
             delete step.texts;
         }
         function resEditToggleEffect(effect) {
             const step = resEditStep.value;
-            if (!step) return;
+            if (!step || isStepEditLocked(step)) return;
             if (!step.effects) step.effects = [];
             const idx = step.effects.indexOf(effect);
             if (idx > -1) step.effects.splice(idx, 1);
             else step.effects.push(effect);
         }
         function resEditSetDefaultJumpMode(step) {
-            if (step && !step._jumpMode) {
+            if (!step || isStepEditLocked(step)) return;
+            if (!step._jumpMode) {
                 step._jumpMode = step.endingId ? 'ending' : (step.jumpChapter ? 'chapter' : 'chapter');
             }
         }
@@ -473,6 +518,9 @@ createApp({
             }
             if (isStepLocked(steps, from) || isStepLocked(steps, to)) {
                 resStepDragCleanup(); return;
+            }
+            if (isStepEditLocked(steps[from]) || isStepEditLocked(steps[to])) {
+                showToast('⚠ 步骤已锁定，无法移动'); resStepDragCleanup(); return;
             }
 
             // 如果末尾有锁定步骤，不允许拖到它的位置或之后
@@ -548,6 +596,9 @@ createApp({
             }
             if (isStepLocked(steps, from) || isStepLocked(steps, to)) {
                 detailStepDragCleanup(); return;
+            }
+            if (isStepEditLocked(steps[from]) || isStepEditLocked(steps[to])) {
+                showToast('⚠ 步骤已锁定，无法移动'); detailStepDragCleanup(); return;
             }
 
             const lastLocked = isStepLocked(steps, steps.length - 1);
@@ -706,9 +757,6 @@ createApp({
             restoreState(next);
             showToast(`已重做 (还可撤销 ${undoStack.length} 步)`);
         }
-
-        // 初始化：保存初始状态
-        saveUndoSnapshot();
 
         // 撤销/重做计数的响应式引用（供模板绑定禁用状态）
         const undoCount = ref(undoStack.length);
@@ -1241,6 +1289,8 @@ createApp({
                 showToast('⚠️ 当前资源包中无任何剧情章节，请在画布上右键创建新章节');
             }
             autoLayout();
+            // 初始化完成后保存首次快照（避免 autoLayout 被记入操作记录）
+            saveUndoSnapshot();
             // 结局节点已由 autoLayout 在章节树下方自动摆放
             window.addEventListener('mouseup', onCanvasMouseUp);
             // 全局禁用浏览器右键菜单（使用 capture 确保优先于所有冒泡处理器）
@@ -1477,11 +1527,8 @@ createApp({
                         selectNode(selected[0].id);
                     }
                 } else {
-                    // 单击空白 = 取消所有选中
-                    clearNodeSelection();
-                    selectedChapterId.value = null;
-                    selectedEndingId.value = null;
-                    editingStepIndex.value = null;
+                    // 单击空白 = 取消所有选中（节点、连线、分组等）
+                    clearSelection();
                 }
 
                 selection.active = false;
@@ -1535,6 +1582,29 @@ createApp({
         function selectStep(index) {
             saveUndoSnapshot(); // 保存状态，编辑步骤文本后可撤销
             editingStepIndex.value = index;
+        }
+
+        /** 定位到指定对象（在树中选中并聚焦，或打开资源管理器） */
+        function locateTo(type, id, subId) {
+            switch (type) {
+                case 'chapter':
+                    selectNode(id);
+                    const chapterNode = treeNodes.value.find(n => n.id === id);
+                    if (chapterNode) zoomToNode(chapterNode);
+                    break;
+                case 'ending':
+                    selectNode(id);
+                    const endingNode = treeNodes.value.find(n => n.id === id);
+                    if (endingNode) zoomToNode(endingNode);
+                    break;
+                case 'resource':
+                    // 打开资源管理器并选中指定标签页和资源
+                    showResourceManager.value = true;
+                    resourceTab.value = subId || 'characters';
+                    selectedResourceId.value = id;
+                    break;
+                default: break;
+            }
         }
 
         // ── 右键菜单 ──────────────────────────────────────────────────
@@ -1841,6 +1911,10 @@ createApp({
         function deleteResource(type, id) {
             const meta = resourceMeta[type];
             if (!meta) return;
+            // 删除包含锁定步骤的章节时给出警告
+            if (meta.isChapter && chapters[id]?.some(s => s.locked)) {
+                if (!confirm(`⚠ 此章节包含已锁定的步骤，确定删除吗？`)) return;
+            }
             if (!confirm(`确定删除此${meta.label}吗？此操作不可撤销。`)) return;
 
             if (meta.isObject) {
@@ -1851,9 +1925,26 @@ createApp({
                 }
                 delete meta.data[id];
             } else {
+                // endings 是数组 —— 清理步骤中的引用后再删除
                 const arr = meta.data;
                 const idx = arr.findIndex(e => e.id === id);
-                if (idx > -1) arr.splice(idx, 1);
+                if (idx > -1) {
+                    // 清理所有步骤中对这个结局的引用
+                    for (const [cid, steps] of Object.entries(chapters)) {
+                        for (const step of steps) {
+                            if (step.endingId === id) step.endingId = '';
+                            if (step.jumpChapter === '_end_' + id) step.jumpChapter = '';
+                            if (step.type === 'choice' && step.choices) {
+                                for (const ch of step.choices) {
+                                    if (ch.jumpChapter === '_end_' + id) ch.jumpChapter = '';
+                                }
+                            }
+                        }
+                    }
+                    // 清理树节点位置
+                    delete nodePositions['_end_' + id];
+                    arr.splice(idx, 1);
+                }
             }
 
             if (selectedResourceId.value === id) {
@@ -2648,7 +2739,7 @@ createApp({
             effectPreviewActive.value = false;
             clearInterval(effectPreviewTimer);
             const fx = getEffectManager();
-            if (fx) fx.clear();
+            if (fx) fx.clear(true); // 立即清理，预览容器需要立刻复用
             if (effectPreviewRef.value) effectPreviewRef.value.innerHTML = '<div class="effect-preview-bg"><span>预览已停止</span></div>';
         }
 
@@ -2783,7 +2874,7 @@ createApp({
                 saveUndoSnapshot();
                 for (const id of batchIds) {
                     if (isEndingNode(id)) {
-                        deleteEndingNodeById(id, false);
+                        deleteEndingNodeById(id, true);
                     } else {
                         delete chapters[id];
                         delete nodePositions[id];
@@ -2791,10 +2882,7 @@ createApp({
                         delete chapterDescriptions[id];
                     }
                 }
-                clearNodeSelection();
-                selectedChapterId.value = null;
-                selectedEndingId.value = null;
-                editingStepIndex.value = null;
+                clearSelection();
                 showToast(`已批量删除 ${batchIds.length} 个${typeLabel}`);
                 return;
             }
@@ -2815,6 +2903,9 @@ createApp({
 
             // 章节删除（原有逻辑）
             const id = singleId;
+            if (chapters[id]?.some(s => s.locked)) {
+                if (!confirm(`⚠ 章节 "${id}" 包含已锁定的步骤，确定删除吗？`)) return;
+            }
             if (!confirm(`确定要删除章节 "${id}" 吗？\n\n此操作会删除该章节的所有步骤。\n其他章节中指向此章节的跳转不会被自动清理。`)) return;
             saveUndoSnapshot();
             delete chapters[id];
@@ -2833,18 +2924,16 @@ createApp({
             const idx = gameEndings.findIndex(e => e.id === endingId);
             if (idx > -1) gameEndings.splice(idx, 1);
             delete nodePositions[endNodeId];
-            // 清理章节中对结局的引用
+            // 清理章节中对结局的引用（不限步骤类型，只要 endingId 匹配就清空）
             if (clearChapterRefs) {
                 for (const [cid, steps] of Object.entries(chapters)) {
                     for (const step of steps) {
                         if (step.jumpChapter === endNodeId) step.jumpChapter = '';
+                        if (step.endingId === endingId) step.endingId = '';
                         if (step.type === 'choice' && step.choices) {
                             for (const ch of step.choices) {
                                 if (ch.jumpChapter === endNodeId) ch.jumpChapter = '';
                             }
-                        }
-                        if (step.type === 'jump' && step.endingId === endingId) {
-                            step.endingId = '';
                         }
                     }
                 }
@@ -2892,6 +2981,12 @@ createApp({
             saveUndoSnapshot();
             if (!selectedChapterId.value) return;
             const steps = chapters[selectedChapterId.value];
+            // 如果末尾步骤已锁定，不可在其前插入
+            const lastIdx = steps.length - 1;
+            if (lastIdx >= 0 && isStepEditLocked(steps[lastIdx])) {
+                showToast('⚠ 末尾步骤已锁定，无法添加新步骤');
+                return;
+            }
             const newStep = {
                 sceneId: steps.length > 0 ? steps[steps.length - 1].sceneId : '',
                 type: 'dialogue',
@@ -2909,6 +3004,7 @@ createApp({
 
         /** 初始化 jump step 的 UI 模式（_jumpMode = 'chapter' | 'ending'） */
         function setDefaultJumpMode(step) {
+            if (isStepEditLocked(step)) return;
             if (!step._jumpMode) {
                 step._jumpMode = step.endingId ? 'ending' : 'chapter';
             }
@@ -2918,6 +3014,7 @@ createApp({
             saveUndoSnapshot();
             if (!selectedChapterId.value) return;
             const steps = chapters[selectedChapterId.value];
+            if (isStepEditLocked(steps[index])) { showToast('⚠ 此步骤已锁定，无法删除'); return; }
             // 禁止删除末尾的 jump step（章节末端标记）
             if (index === steps.length - 1 && steps[index]?.type === 'jump') {
                 showToast('⚠ 章节末尾的跳转步骤不可删除，用于标记章节末端');
@@ -2937,8 +3034,10 @@ createApp({
             saveUndoSnapshot();
             if (!selectedChapterId.value) return;
             const steps = chapters[selectedChapterId.value];
+            if (isStepEditLocked(steps[index])) { showToast('⚠ 此步骤已锁定，无法移动'); return; }
             const newIndex = index + direction;
             if (newIndex < 0 || newIndex >= steps.length) return;
+            if (isStepEditLocked(steps[newIndex])) { showToast('⚠ 目标位置步骤已锁定'); return; }
 
             const [moved] = steps.splice(index, 1);
             steps.splice(newIndex, 0, moved);
@@ -2952,6 +3051,7 @@ createApp({
 
         // ── 分支选项操作 ──────────────────────────────────────────────
         function addChoice() {
+            if (isStepEditLocked(editingStep.value)) { showToast('⚠ 此步骤已锁定'); return; }
             saveUndoSnapshot();
             if (!editingStep.value || editingStep.value.type !== 'choice') return;
             if (!editingStep.value.choices) editingStep.value.choices = [];
@@ -2964,6 +3064,7 @@ createApp({
         }
 
         function removeChoice(index) {
+            if (isStepEditLocked(editingStep.value)) { showToast('⚠ 此步骤已锁定'); return; }
             saveUndoSnapshot();
             if (!editingStep.value || !editingStep.value.choices) return;
             editingStep.value.choices.splice(index, 1);
@@ -2971,6 +3072,7 @@ createApp({
 
         // ── CG 变更 ───────────────────────────────────────────────────
         function onCGChange() {
+            if (isStepEditLocked(editingStep.value)) return;
             if (!editingStep.value) return;
             const action = editingStep.value._cgAction;
             if (action === 'enter') {
@@ -3003,6 +3105,7 @@ createApp({
 
         // ── 角色变更 ──────────────────────────────────────────────────
         function addCharChange() {
+            if (isStepEditLocked(editingStep.value)) return;
             if (!editingStep.value) return;
             if (!editingStep.value._charChanges) editingStep.value._charChanges = [];
             editingStep.value._charChanges.push({ id: '', action: 'enter', spriteId: '', animation: '' });
@@ -3010,12 +3113,14 @@ createApp({
         }
 
         function removeCharChange(index) {
+            if (isStepEditLocked(editingStep.value)) return;
             if (!editingStep.value?._charChanges) return;
             editingStep.value._charChanges.splice(index, 1);
             syncCharChangesToStep();
         }
 
         function syncCharChangesToStep() {
+            if (isStepEditLocked(editingStep.value)) return;
             saveUndoSnapshot();
             if (!editingStep.value) return;
             const valid = (editingStep.value._charChanges || []).filter(cc => cc.id);
@@ -3043,6 +3148,7 @@ createApp({
 
         // ── 特效 ──────────────────────────────────────────────────────
         function toggleEffect(effect) {
+            if (isStepEditLocked(editingStep.value)) return;
             if (!editingStep.value) return;
             if (!editingStep.value.effects) editingStep.value.effects = [];
             const idx = editingStep.value.effects.indexOf(effect);
@@ -3056,7 +3162,7 @@ createApp({
         // ── 文本批处理 ──────────────────────────────────────────────
         function addBatchTextSegment() {
             const step = editingStep.value;
-            if (!step) return;
+            if (!step || isStepEditLocked(step)) return;
             if (!step.texts) {
                 step.texts = [step.text || ''];
             }
@@ -3065,7 +3171,7 @@ createApp({
 
         function removeBatchTextSegment(index) {
             const step = editingStep.value;
-            if (!step || !step.texts) return;
+            if (!step || isStepEditLocked(step) || !step.texts) return;
             if (step.texts.length <= 1) return;
             step.texts.splice(index, 1);
             step.text = step.texts[0];
@@ -3073,9 +3179,31 @@ createApp({
 
         function disableBatchText() {
             const step = editingStep.value;
-            if (!step || !step.texts) return;
+            if (!step || isStepEditLocked(step) || !step.texts) return;
             step.text = step.texts[0] || '';
             delete step.texts;
+        }
+
+        // ── 步骤锁定编辑 ──────────────────────────────────────────────
+        function isStepEditLocked(step) {
+            return step && step.locked === true;
+        }
+
+        function toggleStepLock(index) {
+            // 资源管理器活跃时用 selectedResourceId，否则用 selectedChapterId
+            const cid = (showResourceManager.value && resourceTab.value === 'chapters')
+                ? selectedResourceId.value : selectedChapterId.value;
+            if (!cid) return;
+            const steps = chapters[cid];
+            if (!steps || index < 0 || index >= steps.length) return;
+            const step = steps[index];
+            if (step.locked) {
+                delete step.locked;
+                showToast(`步骤 #${index + 1} 已解锁`);
+            } else {
+                step.locked = true;
+                showToast(`步骤 #${index + 1} 已锁定`);
+            }
         }
 
         // ── 辅助 ──────────────────────────────────────────────────────
@@ -3493,13 +3621,9 @@ createApp({
                 if (showFileMenu.value) { showFileMenu.value = false; e.preventDefault(); return; }
                 if (editingGlobalSearch.value) { endGlobalSearch(); e.preventDefault(); return; }
                 if (showZoomInput.value) { showZoomInput.value = false; e.preventDefault(); return; }
-                // 取消选中
-                if (selectedChapterId.value || selectedEndingId.value || selectedEdge.value) {
-                    selectedChapterId.value = null;
-                    selectedEndingId.value = null;
-                    selectedEdge.value = null;
-                    editingStepIndex.value = null;
-                    clearNodeSelection();
+                // 取消选中（节点、连线、分组等）
+                if (selectedChapterId.value || selectedEndingId.value || selectedEdge.value || selectedGroupId.value) {
+                    clearSelection();
                     e.preventDefault();
                 }
                 return;
@@ -3760,7 +3884,7 @@ createApp({
             handleWheel, zoomToNode,
             onCanvasMouseDown, onCanvasMouseMove, onCanvasMouseUp,
             onNodeMouseDown,
-            selectNode, selectStep,
+            selectNode, selectStep, selectObject, getSelection, clearSelection, locateTo,
             addChapter, addEndingNode, addEndingNodeAtPos, deleteChapter, onChapterIdChange,
             addStep, setDefaultJumpMode, deleteStep, moveStep,
             addChoice, removeChoice,
@@ -3768,6 +3892,7 @@ createApp({
             toggleEffect,
             addBatchTextSegment, removeBatchTextSegment, disableBatchText,
             getCharName, getCharSprites, stepTextBrief, stepTypeLabel,
+            isStepEditLocked, toggleStepLock,
             exportAll, exportJSON, formatJS, copyExport, downloadExport, resetAll,
             exportPackZip, triggerImportPack, handlePackImport,
             // 右键菜单

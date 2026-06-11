@@ -823,6 +823,8 @@ export function useEngine() {
     function initGameEffects() {
         const el = document.getElementById('particles-container');
         if (el) {
+            // 清理旧实例避免泄漏
+            if (fxManager) { fxManager.clear(true); fxManager = null; }
             fxManager = new EffectsManager(el);
             if (currentScreenEffect.value) fxManager.play(currentScreenEffect.value);
         }
@@ -832,6 +834,8 @@ export function useEngine() {
         Vue.nextTick(() => {
             const el = document.getElementById('home-particles-container');
             if (el && homeConfig?.screenEffect) {
+                // 清理旧实例避免泄漏
+                if (homeFxManager) { homeFxManager.clear(true); homeFxManager = null; }
                 homeFxManager = new EffectsManager(el);
                 homeFxManager.play(homeConfig.screenEffect);
             }

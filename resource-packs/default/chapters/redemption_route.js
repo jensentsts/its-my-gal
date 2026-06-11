@@ -180,7 +180,7 @@ export const chapter_redemption_route = [
   },
   {
     "sceneId": "forest_gate",
-    "type": "ending",
+    "type": "jump",
     "endingId": "redemption_end"
   }
 ];

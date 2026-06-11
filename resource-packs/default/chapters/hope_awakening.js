@@ -122,7 +122,7 @@ export const chapter_hope_awakening = [
   },
   {
     "sceneId": "forest_gate",
-    "type": "ending",
+    "type": "jump",
     "endingId": "hope_end"
   }
 ];

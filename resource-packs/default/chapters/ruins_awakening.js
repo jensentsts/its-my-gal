@@ -60,7 +60,7 @@ export const chapter_ruins_awakening = [
   },
   {
     "sceneId": "sky_bg",
-    "type": "ending",
+    "type": "jump",
     "endingId": "ruin_end"
   }
 ];

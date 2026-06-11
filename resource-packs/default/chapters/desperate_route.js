@@ -123,7 +123,7 @@ export const chapter_desperate_route = [
   },
   {
     "sceneId": "altar_core",
-    "type": "ending",
+    "type": "jump",
     "endingId": "dark_possession_end"
   }
 ];

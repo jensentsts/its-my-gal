@@ -44,7 +44,7 @@ export const chapter_ruins_exploration_bad = [
   },
   {
     "sceneId": "ruins_entrance",
-    "type": "ending",
+    "type": "jump",
     "endingId": "bad_end"
   }
 ];

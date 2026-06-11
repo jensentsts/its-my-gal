@@ -1738,10 +1738,6 @@ img {
 .step-dragover {
     border-top: 2px solid var(--accent-green) !important;
 }
-.step-locked {
-    opacity: 0.7;
-    cursor: default !important;
-}
 .step-card-header .lock-icon {
     font-size: 11px;
     flex-shrink: 0;
@@ -1749,6 +1745,87 @@ img {
 }
 .step-card-header .drag-handle {
     margin-right: 2px;
+}
+
+/* 定位按钮 + 行内布局 */
+.locate-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+}
+.locate-row select {
+    flex: 1;
+    min-width: 0;
+}
+.tb-btn.tb-xs {
+    font-size: 11px;
+    padding: 0 4px;
+    line-height: 1.6;
+    min-width: 20px;
+}
+
+/* 跳转标签包裹 */
+.jump-tag-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin: 0 2px;
+}
+.jump-tag-wrap .tb-xs {
+    opacity: 0.5;
+}
+.jump-tag-wrap:hover .tb-xs {
+    opacity: 1;
+}
+
+/* 步骤锁定 */
+.step-locked {
+    opacity: 0.75;
+    cursor: default !important;
+    border-left: 3px solid var(--accent-yellow) !important;
+}
+.step-locked .step-card-body {
+    filter: blur(1px);
+    opacity: 0.6;
+}
+.step-locked .step-card-actions .step-btn {
+    opacity: 0.4;
+    pointer-events: none;
+}
+.step-locked-banner {
+    background: rgba(176, 160, 64, 0.15);
+    border: 1px solid var(--accent-yellow);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--accent-yellow);
+    margin-bottom: 12px;
+    text-align: center;
+}
+.step-btn-lock {
+    font-size: 12px;
+    padding: 0 4px;
+    background: none !important;
+    border: none !important;
+}
+
+/* 用户锁定 vs 位置锁定区分 */
+.step-locked-pos {
+    opacity: 0.7;
+    cursor: default !important;
+}
+.res-step-locked-pos {
+    opacity: 0.7;
+    cursor: default !important;
+}
+.res-step-locked {
+    opacity: 0.75;
+    cursor: default !important;
+    border-left: 3px solid var(--accent-yellow) !important;
+}
+.res-step-locked:hover {
+    background: var(--bg-tertiary);
 }
 
 .resource-editor {

@@ -336,15 +336,21 @@
                 <div class="step-detail-panel-header">
                     <span class="section-label">✏️ 步骤 #{{ editingStepIndex + 1 }}</span>
                     <div class="step-detail-panel-actions">
-                        <button class="tb-btn tb-sm" @click="moveStep(editingStepIndex, -1)" :disabled="editingStepIndex === 0" title="上移">▲</button>
-                        <button class="tb-btn tb-sm" @click="moveStep(editingStepIndex, 1)" :disabled="editingStepIndex >= (editingSteps?.length || 0) - 1" title="下移">▼</button>
-                        <button class="tb-btn tb-sm tb-danger" @click="deleteStep(editingStepIndex)" title="删除步骤">✕</button>
+                        <button class="tb-btn tb-sm" @click="toggleStepLock(editingStepIndex)" :title="editingStep?.locked ? '解锁步骤' : '锁定步骤'">
+                            {{ editingStep?.locked ? '🔒' : '🔓' }}
+                        </button>
+                        <button class="tb-btn tb-sm" @click="moveStep(editingStepIndex, -1)" :disabled="editingStepIndex === 0 || isStepEditLocked(editingStep)" title="上移">▲</button>
+                        <button class="tb-btn tb-sm" @click="moveStep(editingStepIndex, 1)" :disabled="editingStepIndex >= (editingSteps?.length || 0) - 1 || isStepEditLocked(editingStep)" title="下移">▼</button>
+                        <button class="tb-btn tb-sm tb-danger" @click="deleteStep(editingStepIndex)" :disabled="isStepEditLocked(editingStep)" title="删除步骤">✕</button>
                     </div>
                 </div>
                 <div class="step-detail-panel-body">
+                    <div class="step-locked-banner" v-if="isStepEditLocked(editingStep)">
+                        🔒 此步骤已锁定，不可编辑
+                    </div>
                     <div class="form-row">
                         <label>类型</label>
-                        <select v-model="editingStep.type">
+                        <select v-model="editingStep.type" :disabled="isStepEditLocked(editingStep)">
                             <option value="dialogue">对话 (dialogue)</option>
                             <option value="choice">分支选择 (choice)</option>
                             <option value="jump">直接跳转 (jump)</option>
@@ -354,17 +360,23 @@
                     <template v-if="editingStep.type === 'dialogue'">
                         <div class="form-row">
                             <label>场景</label>
-                            <select v-model="editingStep.sceneId">
-                                <option value="">(无场景)</option>
-                                <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
-                            </select>
+                            <div class="locate-row">
+                                <select v-model="editingStep.sceneId">
+                                    <option value="">(无场景)</option>
+                                    <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
+                                </select>
+                                <button class="tb-btn tb-xs" v-if="editingStep.sceneId" @click.stop="locateTo('resource', editingStep.sceneId, 'scenes')" title="定位到场景">📍</button>
+                            </div>
                         </div>
                         <div class="form-row">
                             <label>说话人</label>
-                            <select v-model="editingStep.characterId">
-                                <option value="">(旁白/叙述)</option>
-                                <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
-                            </select>
+                            <div class="locate-row">
+                                <select v-model="editingStep.characterId">
+                                    <option value="">(旁白/叙述)</option>
+                                    <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+                                </select>
+                                <button class="tb-btn tb-xs" v-if="editingStep.characterId" @click.stop="locateTo('resource', editingStep.characterId, 'characters')" title="定位到角色">📍</button>
+                            </div>
                         </div>
                         <div class="form-row">
                             <label>对话文本</label>
@@ -404,6 +416,7 @@
                                     <option value="">选择 CG...</option>
                                     <option v-for="(cg, cgid) in gameCgLibrary" :key="cgid" :value="cgid">{{ cg.title }}</option>
                                 </select>
+                                <button class="tb-btn tb-xs" v-if="editingStep._cgAction === 'enter' && editingStep._cgId" @click.stop="locateTo('resource', editingStep._cgId, 'cg')" title="定位到 CG">📍</button>
                                 <input v-if="editingStep._cgAction" type="text" v-model="editingStep._cgAnimation" @change="onCGChange" placeholder="动画" />
                             </div>
                         </div>
@@ -433,10 +446,13 @@
                         <div class="form-row form-row-2col">
                             <div class="form-col">
                                 <label>获得物品</label>
-                                <select v-model="editingStep.gainItem">
-                                    <option value="">(无)</option>
-                                    <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
-                                </select>
+                                <div class="locate-row">
+                                    <select v-model="editingStep.gainItem">
+                                        <option value="">(无)</option>
+                                        <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
+                                    </select>
+                                    <button class="tb-btn tb-xs" v-if="editingStep.gainItem" @click.stop="locateTo('resource', editingStep.gainItem, 'items')" title="定位到物品">📍</button>
+                                </div>
                             </div>
                             <div class="form-col">
                                 <label>获得方式</label>
@@ -501,6 +517,7 @@
                                             </optgroup>
                                         </select>
                                         <input type="text" v-model="choice.flag" placeholder="flag" class="choice-flag" />
+                                        <button class="tb-btn tb-xs" v-if="choice.jumpChapter" @click.stop="locateTo(choice.jumpChapter.startswith('_end_') ? 'ending' : 'chapter', choice.jumpChapter)" title="定位到">📍</button>
                                     </div>
                                 </div>
                                 <button class="tb-btn tb-sm" @click="addChoice">➕ 添加选项</button>
@@ -525,24 +542,30 @@
                         <template v-if="editingStep._jumpMode === 'chapter'">
                             <div class="form-row">
                                 <label>目标章节</label>
-                                <select v-model="editingStep.jumpChapter">
-                                    <option value="">选择目标...</option>
-                                    <optgroup label="章节">
-                                        <option v-for="(_, cid) in chapters" :key="cid" :value="cid">{{ cid }}</option>
-                                    </optgroup>
-                                    <optgroup label="结局（快捷）">
-                                        <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">🎬 {{ end.title }} ({{ end.id }})</option>
-                                    </optgroup>
-                                </select>
+                                <div class="locate-row">
+                                    <select v-model="editingStep.jumpChapter">
+                                        <option value="">选择目标...</option>
+                                        <optgroup label="章节">
+                                            <option v-for="(_, cid) in chapters" :key="cid" :value="cid">{{ cid }}</option>
+                                        </optgroup>
+                                        <optgroup label="结局（快捷）">
+                                            <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">🎬 {{ end.title }} ({{ end.id }})</option>
+                                        </optgroup>
+                                    </select>
+                                    <button class="tb-btn tb-xs" v-if="editingStep.jumpChapter" @click.stop="locateTo(editingStep.jumpChapter.startsWith('_end_') ? 'ending' : 'chapter', editingStep.jumpChapter)" title="定位到">📍</button>
+                                </div>
                             </div>
                         </template>
                         <template v-if="editingStep._jumpMode === 'ending'">
                             <div class="form-row">
                                 <label>触发结局</label>
-                                <select v-model="editingStep.endingId">
-                                    <option value="">选择结局...</option>
-                                    <option v-for="end in gameEndings" :key="end.id" :value="end.id">🎬 {{ end.title }} ({{ end.id }})</option>
-                                </select>
+                                <div class="locate-row">
+                                    <select v-model="editingStep.endingId">
+                                        <option value="">选择结局...</option>
+                                        <option v-for="end in gameEndings" :key="end.id" :value="end.id">🎬 {{ end.title }} ({{ end.id }})</option>
+                                    </select>
+                                    <button class="tb-btn tb-xs" v-if="editingStep.endingId" @click.stop="locateTo('ending', '_end_' + editingStep.endingId)" title="定位到结局">📍</button>
+                                </div>
                             </div>
                         </template>
                         <div class="form-row form-row-2col">
@@ -635,9 +658,10 @@
                     <div class="section-label">🔗 来源章节</div>
                     <div class="resource-list-items" style="max-height:180px;overflow-y:auto">
                         <div v-for="src in endingIncomingChapters" :key="src.id + (src.stepIdx || 0)"
-                             class="resource-list-item" @click="selectNode(src.id)">
+                             class="resource-list-item">
                             <span class="resource-item-name">{{ src.id }}</span>
-                            <span class="resource-item-id" v-if="src.text">{{ src.text }}</span>
+                            <span class="resource-item-id" v-if="src.text" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ src.text }}</span>
+                            <button class="tb-btn tb-xs" @click.stop="locateTo('chapter', src.id)" title="定位到章节">📍</button>
                         </div>
                         <div class="resource-list-empty" v-if="endingIncomingChapters.length === 0">
                             暂无章节指向此结局
@@ -666,8 +690,11 @@
                         <span>步骤数：<strong>{{ editingSteps.length }}</strong></span>
                         <span v-if="chapterIncomingCount > 0">被引用：<strong>{{ chapterIncomingCount }}</strong> 次</span>
                         <span v-if="chapterOutgoing.length > 0">
-                            跳转到：<strong v-for="t in chapterOutgoing" :key="t"
-                                          class="jump-tag" @click="selectNode(t)">{{ t }}</strong>
+                            跳转到：
+                            <span v-for="t in chapterOutgoing" :key="t" class="jump-tag-wrap">
+                                <strong class="jump-tag" @click="selectNode(t)">{{ t }}</strong>
+                                <button class="tb-btn tb-xs" @click.stop="locateTo(t.startsWith('_end_') ? 'ending' : 'chapter', t)" title="定位到">📍</button>
+                            </span>
                         </span>
                     </div>
                     <div class="form-row">
@@ -693,16 +720,17 @@
                                  'step-active': editingStepIndex === idx,
                                  'step-dragging': detailStepDrag.dragIndex === idx,
                                  'step-dragover': detailStepDrag.dropIndex === idx && detailStepDrag.dragIndex !== idx,
-                                 'step-locked': isStepLocked(editingSteps, idx)
+                                 'step-locked-pos': isStepLocked(editingSteps, idx),
+                                 'step-locked': step.locked
                              }"
-                             :draggable="!isStepLocked(editingSteps, idx)"
+                             :draggable="!isStepLocked(editingSteps, idx) && !step.locked"
                              @dragstart="detailStepDragStart($event, idx)"
                              @dragover="detailStepDragOver($event, idx)"
                              @drop="detailStepDrop($event, idx)"
                              @dragend="detailStepDragEnd"
                              @click="selectStep(idx)">
                             <div class="step-card-header">
-                                <span class="drag-handle" v-if="!isStepLocked(editingSteps, idx)">⠿</span>
+                                <span class="drag-handle" v-if="!isStepLocked(editingSteps, idx) && !step.locked">⠿</span>
                                 <span class="step-type-badge"
                                       :class="step.type === 'ending' || (step.type === 'jump' && step.endingId) ? 'badge-ending' : 'badge-' + (step.type || 'dialogue')">
                                     {{ stepTypeLabel(step.type, step) }}
@@ -710,9 +738,12 @@
                                 <span class="step-scene" v-if="step.sceneId">{{ step.sceneId }}</span>
                                 <span class="step-char" v-if="step.characterId">👤 {{ getCharName(step.characterId) }}</span>
                                 <div class="step-card-actions">
-                                    <button class="step-btn" @click.stop="moveStep(idx, -1)" :disabled="idx === 0" title="上移">▲</button>
-                                    <button class="step-btn" @click.stop="moveStep(idx, 1)" :disabled="idx === editingSteps.length - 1" title="下移">▼</button>
-                                    <button class="step-btn step-btn-del" @click.stop="deleteStep(idx)" title="删除">✕</button>
+                                    <button class="step-btn step-btn-lock" @click.stop="toggleStepLock(idx)" :title="step.locked ? '解锁步骤' : '锁定步骤'">
+                                        {{ step.locked ? '🔒' : '🔓' }}
+                                    </button>
+                                    <button class="step-btn" @click.stop="moveStep(idx, -1)" :disabled="idx === 0 || step.locked" title="上移">▲</button>
+                                    <button class="step-btn" @click.stop="moveStep(idx, 1)" :disabled="idx === editingSteps.length - 1 || step.locked" title="下移">▼</button>
+                                    <button class="step-btn step-btn-del" @click.stop="deleteStep(idx)" :disabled="step.locked" title="删除">✕</button>
                                 </div>
                                 <span class="lock-icon" v-if="isStepLocked(editingSteps, idx)" title="末尾路由步骤，不可移动">🔒</span>
                             </div>
@@ -1202,22 +1233,24 @@
                                                  'res-step-active': resEditStepIndex === si,
                                                  'res-step-dragging': resStepDrag.dragIndex === si,
                                                  'res-step-dragover': resStepDrag.dropIndex === si && resStepDrag.dragIndex !== si,
-                                                 'res-step-locked': isStepLocked(selectedResource._steps, si)
+                                                 'res-step-locked-pos': isStepLocked(selectedResource._steps, si),
+                                                 'res-step-locked': step.locked
                                              }"
-                                             :draggable="!isStepLocked(selectedResource._steps, si)"
+                                             :draggable="!isStepLocked(selectedResource._steps, si) && !step.locked"
                                              @dragstart="resStepDragStart($event, si)"
                                              @dragover="resStepDragOver($event, si)"
                                              @drop="resStepDrop($event, si)"
                                              @dragend="resStepDragEnd"
                                              @click="resEditStepIndex = si">
-                                            <span class="drag-handle" v-if="!isStepLocked(selectedResource._steps, si)">⠿</span>
+                                            <span class="drag-handle" v-if="!isStepLocked(selectedResource._steps, si) && !step.locked">⠿</span>
                                             <span class="step-type-badge"
                                                   :class="step.type === 'ending' || (step.type === 'jump' && step.endingId) ? 'badge-ending' : 'badge-' + (step.type || 'dialogue')">
                                                 {{ stepTypeLabel(step.type, step) }}
                                             </span>
                                             <span class="step-text-preview" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ stepTextBrief(step) }}</span>
                                             <span class="step-idx">{{ si + 1 }}</span>
-                                            <span class="lock-icon" v-if="isStepLocked(selectedResource._steps, si)" title="末尾路由步骤，不可移动">🔒</span>
+                                            <span class="lock-icon" v-if="step.locked" title="此步骤已锁定">🔒</span>
+                                            <span class="lock-icon" v-if="isStepLocked(selectedResource._steps, si) && !step.locked" title="末尾路由步骤，不可移动">🔒</span>
                                         </div>
                                         <div class="resource-list-empty" v-if="!selectedResource._steps?.length">
                                             暂无步骤，点击上方「➕」添加步骤
@@ -1236,17 +1269,24 @@
                                 <div class="step-editor-header">
                                     <span class="section-label">✏️ 步骤 #{{ resEditStepIndex + 1 }}</span>
                                     <div class="step-editor-header-actions">
-                                        <button class="tb-btn tb-sm" @click="resEditMoveStep(-1)" :disabled="resEditStepIndex === 0" title="上移">▲</button>
-                                        <button class="tb-btn tb-sm" @click="resEditMoveStep(1)" :disabled="resEditStepIndex >= (selectedResource._steps?.length || 0) - 1" title="下移">▼</button>
-                                        <button class="tb-btn tb-sm tb-danger" @click="resEditDeleteStep" title="删除步骤">✕</button>
+                                        <button class="tb-btn tb-sm" @click="toggleStepLock(resEditStepIndex)" :title="resEditStep?.locked ? '解锁步骤' : '锁定步骤'">
+                                            {{ resEditStep?.locked ? '🔒' : '🔓' }}
+                                        </button>
+                                        <button class="tb-btn tb-sm" @click="resEditMoveStep(-1)" :disabled="resEditStepIndex === 0 || isStepEditLocked(resEditStep)" title="上移">▲</button>
+                                        <button class="tb-btn tb-sm" @click="resEditMoveStep(1)" :disabled="resEditStepIndex >= (selectedResource._steps?.length || 0) - 1 || isStepEditLocked(resEditStep)" title="下移">▼</button>
+                                        <button class="tb-btn tb-sm tb-danger" @click="resEditDeleteStep" :disabled="isStepEditLocked(resEditStep)" title="删除步骤">✕</button>
                                     </div>
                                 </div>
                                 <div class="step-editor-body">
 
+                                <div class="step-locked-banner" v-if="isStepEditLocked(resEditStep)">
+                                    🔒 此步骤已锁定，不可编辑
+                                </div>
+
                                 <!-- 步骤类型 -->
                                 <div class="form-row">
                                     <label>类型</label>
-                                    <select v-model="resEditStep.type">
+                                    <select v-model="resEditStep.type" :disabled="isStepEditLocked(resEditStep)">
                                         <option value="dialogue">对话 (dialogue)</option>
                                         <option value="choice">分支选择 (choice)</option>
                                         <option value="jump">直接跳转 (jump)</option>
@@ -1258,17 +1298,23 @@
                                 <template v-if="resEditStep.type === 'dialogue'">
                                     <div class="form-row">
                                         <label>场景</label>
+                                        <div class="locate-row">
                                         <select v-model="resEditStep.sceneId">
                                             <option value="">(无场景)</option>
                                             <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
                                         </select>
+                                        <button class="tb-btn tb-xs" v-if="resEditStep.sceneId" @click.stop="locateTo('resource', resEditStep.sceneId, 'scenes')" title="定位到场景">📍</button>
+                                    </div>
                                     </div>
                                     <div class="form-row">
                                         <label>说话人</label>
+                                        <div class="locate-row">
                                         <select v-model="resEditStep.characterId">
                                             <option value="">(旁白/叙述)</option>
                                             <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
                                         </select>
+                                        <button class="tb-btn tb-xs" v-if="resEditStep.characterId" @click.stop="locateTo('resource', resEditStep.characterId, 'characters')" title="定位到角色">📍</button>
+                                    </div>
                                     </div>
                                     <div class="form-row">
                                         <label>对话文本</label>
@@ -1308,6 +1354,7 @@
                                                 <option value="">选择 CG...</option>
                                                 <option v-for="(cg, cgid) in gameCgLibrary" :key="cgid" :value="cgid">{{ cg.title }}</option>
                                             </select>
+                                            <button class="tb-btn tb-xs" v-if="resEditStep._cgAction === 'enter' && resEditStep._cgId" @click.stop="locateTo('resource', resEditStep._cgId, 'cg')" title="定位到 CG">📍</button>
                                             <input v-if="resEditStep._cgAction" type="text" v-model="resEditStep._cgAnimation" @change="resEditOnCGChange" placeholder="动画" />
                                         </div>
                                     </div>
@@ -1337,10 +1384,13 @@
                                     <div class="form-row form-row-2col">
                                         <div class="form-col">
                                             <label>获得物品</label>
+                                            <div class="locate-row">
                                             <select v-model="resEditStep.gainItem">
                                                 <option value="">(无)</option>
                                                 <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
                                             </select>
+                                            <button class="tb-btn tb-xs" v-if="resEditStep.gainItem" @click.stop="locateTo('resource', resEditStep.gainItem, 'items')" title="定位到物品">📍</button>
+                                        </div>
                                         </div>
                                         <div class="form-col">
                                             <label>获得方式</label>
@@ -1407,6 +1457,7 @@
                                                         </optgroup>
                                                     </select>
                                                     <input type="text" v-model="choice.flag" placeholder="flag" class="choice-flag" />
+                                                    <button class="tb-btn tb-xs" v-if="choice.jumpChapter" @click.stop="locateTo(choice.jumpChapter.startswith('_end_') ? 'ending' : 'chapter', choice.jumpChapter)" title="定位到">📍</button>
                                                 </div>
                                             </div>
                                             <button class="tb-btn tb-sm" @click="resEditAddChoice">➕ 添加选项</button>
@@ -1433,6 +1484,7 @@
                                     <template v-if="resEditStep._jumpMode === 'chapter'">
                                         <div class="form-row">
                                             <label>目标章节</label>
+                                            <div class="locate-row">
                                             <select v-model="resEditStep.jumpChapter">
                                                 <option value="">选择目标...</option>
                                                 <optgroup label="章节">
@@ -1442,15 +1494,20 @@
                                                     <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">🎬 {{ end.title }} ({{ end.id }})</option>
                                                 </optgroup>
                                             </select>
+                                            <button class="tb-btn tb-xs" v-if="resEditStep.jumpChapter" @click.stop="locateTo(resEditStep.jumpChapter.startswith('_end_') ? 'ending' : 'chapter', resEditStep.jumpChapter)" title="定位到">📍</button>
+                                        </div>
                                         </div>
                                     </template>
                                     <template v-if="resEditStep._jumpMode === 'ending'">
                                         <div class="form-row">
                                             <label>触发结局</label>
+                                            <div class="locate-row">
                                             <select v-model="resEditStep.endingId">
                                                 <option value="">选择结局...</option>
                                                 <option v-for="end in gameEndings" :key="end.id" :value="end.id">🎬 {{ end.title }} ({{ end.id }})</option>
                                             </select>
+                                            <button class="tb-btn tb-xs" v-if="resEditStep.endingId" @click.stop="locateTo('ending', '_end_' + resEditStep.endingId)" title="定位到结局">📍</button>
+                                        </div>
                                             <div v-if="resEditStep.endingId" class="ending-preview" style="margin-top:6px">
                                                 <div class="ending-preview-title">{{ (gameEndings.find(e => e.id === resEditStep.endingId) || {}).title }}</div>
                                                 <div class="ending-preview-desc">{{ (gameEndings.find(e => e.id === resEditStep.endingId) || {}).description }}</div>

@@ -110,6 +110,7 @@ export class EffectsManager {
 
     _startLoop() {
         if (this._rafId) return;
+        if (!this.container?.isConnected) return;
         this._lastFrameTime = performance.now();
         this._spawnTimer = 0;
         const loop = (now) => {
@@ -158,6 +159,10 @@ export class EffectsManager {
 
     _spawnParticle() {
         if (!this._spawnFn || !this.container) return;
+        if (!this.container.isConnected) {
+            this._stopLoop();
+            return;
+        }
         const el = EffectsManager._acquireParticle();
         const particle = this._spawnFn(el, this._spawnConfig);
         if (!particle) {
@@ -217,6 +222,11 @@ export class EffectsManager {
      */
     play(modeOrConfig) {
         if (!modeOrConfig || !this.container) return;
+        // 容器已断开时不播放
+        if (!this.container.isConnected) {
+            console.warn('[EffectsManager] 容器已断开，跳过特效播放');
+            return;
+        }
 
         let config = { type: modeOrConfig };
         if (typeof modeOrConfig === 'string') {
@@ -271,18 +281,25 @@ export class EffectsManager {
         this._spawnConfig = null;
         this._spawnTimer = 0;
 
-        if (immediate || this._activeParticles.length === 0) {
+        // 立即释放所有过渡粒子
+        for (const tp of this._transitionParticles) {
+            EffectsManager._releaseParticle(tp.el);
+        }
+        this._transitionParticles = [];
+
+        // 清理附加覆盖层
+        this._cleanupOverlays();
+
+        // 容器已断开时立即释放所有粒子并清除 CSS
+        const containerGone = !this.container || !this.container.isConnected;
+
+        if (immediate || containerGone || this._activeParticles.length === 0) {
             for (const p of this._activeParticles) {
                 try { p.onExpire(p.el); } catch (e) { /* 安全清理 */ }
                 EffectsManager._releaseParticle(p.el);
             }
             this._activeParticles = [];
-            for (const tp of this._transitionParticles) {
-                EffectsManager._releaseParticle(tp.el);
-            }
-            this._transitionParticles = [];
             this._clearCustomCSS();
-            this._cleanupOverlays();
             this.currentMode = '';
             return;
         }
@@ -301,16 +318,24 @@ export class EffectsManager {
             });
         }
         this._activeParticles = [];
-        this._cleanupOverlays();
         this.currentMode = '';
 
-        // 延迟清理 CSS
+        // 延迟清理自定义 CSS（等过渡动画播放完）
         setTimeout(() => {
             this._clearCustomCSS();
-            if (this._transitionParticles.length > 0) {
-                setTimeout(() => this._clearCustomCSS(), EffectsManager.TRANSITION_DURATION);
-            }
-        }, EffectsManager.TRANSITION_DURATION + 50);
+        }, EffectsManager.TRANSITION_DURATION + 100);
+    }
+
+    /**
+     * 完全销毁特效管理器，释放所有资源并断开容器引用
+     */
+    destroy() {
+        this.clear(true);
+        this.container = null;
+        this._spawnFn = null;
+        this._spawnConfig = null;
+        this._customCssLinks = [];
+        this._warmedUp = false;
     }
 
     _cleanupOverlays() {
@@ -333,6 +358,7 @@ export class EffectsManager {
 
     _prewarm() {
         if (!this._spawnFn || this._warmedUp) return;
+        if (!this.container?.isConnected) { this._stopLoop(); return; }
         this._warmedUp = true;
 
         const warmCount = Math.min(
