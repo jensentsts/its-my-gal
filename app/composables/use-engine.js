@@ -345,6 +345,12 @@ export function useEngine() {
 
         eng.on('step:enter', (step) => {
             syncState();
+            // 步骤变更时重新检测场景背景（确保 sceneBgFailed 随场景切换刷新）
+            if (step?.sceneId) {
+                Vue.nextTick(() => updateSceneBgTest());
+            } else {
+                sceneBgFailed.value = false;
+            }
         });
 
         eng.on('characters:change', (chars) => {

@@ -102,16 +102,20 @@
             <div class="screen-mask-overlay" :class="homeEffectMaskClasses"></div>
             <div id="home-particles-container" class="effect-canvas-container"></div>
 
-            <button class="menu-info-btn" @click="openInfoPanel">ⓘ</button>
+            <div class="menu-top-right-btns">
+                <button class="menu-info-btn" @click="openSettings" title="设置">⚙️</button>
+                <button class="menu-info-btn" @click="openInfoPanel" title="关于">ⓘ</button>
+            </div>
 
             <div class="menu-container">
                 <h1>{{ configTitle }}</h1>
                 <div class="menu-buttons">
-                    <button v-if="hasExitSave" class="btn btn-continue" @click="continueFromExit">▶ 继续游戏</button>
-                    <button class="btn" @click="openArchiveSlotsPanel('load')">从已有存档继续</button>
-                    <button class="btn" @click="confirmStartNewGame">新的旅程</button>
-                    <button class="btn" @click="openCharactersPanel">角色名录</button>
-                    <button class="btn" @click="activeMenuPanel = 'gallery'">画廊 CG 图鉴</button>
+                    <button v-for="(item, index) in menuItems" :key="index"
+                            class="btn" :class="[item.cls || '', { 'menu-focused': index === menuFocusIndex }]"
+                            @click="item.action"
+                            @mouseenter="menuFocusIndex = index">
+                        {{ item.label }}
+                    </button>
                 </div>
             </div>
 
@@ -147,6 +151,72 @@
                 </div>
             </div>
 
+            <!-- ════════════════════════════════════════════════════ -->
+            <!--  设置面板                                           -->
+            <!-- ════════════════════════════════════════════════════ -->
+            <div class="sub-panel settings-panel" v-if="showSettings" :style="panelBackgroundStyle">
+                <div class="panel-header">
+                    <h2>⚙️ 设置</h2>
+                    <div class="settings-tabs">
+                        <button :class="{ active: settingsTab === 'keyboard' }"
+                                @click="settingsTab = 'keyboard'">🎮 按键设置</button>
+                        <button :class="{ active: settingsTab === 'game' }"
+                                @click="settingsTab = 'game'">⚡ 游戏设置</button>
+                    </div>
+                    <button class="close-btn" @click="closeSettings">返回主视图</button>
+                </div>
+
+                <!-- ── 按键设置 ── -->
+                <div class="settings-content" v-if="settingsTab === 'keyboard'" @click="cancelRebind">
+                    <div class="settings-scroll-area">
+                        <div class="settings-section" v-for="(group, ctx) in keybindings.getActionsByGroup()" :key="ctx">
+                            <h3 class="settings-section-title">{{ group.label }}</h3>
+                            <div class="keybinding-row" v-for="action in group.actions" :key="action.id">
+                                <span class="kb-label">{{ action.label }}</span>
+                                <button class="kb-key-btn"
+                                        :class="{ capturing: capturingActionId === action.id }"
+                                        @click.stop="capturingActionId === action.id ? cancelRebind() : rebindAction(action.id)">
+                                    <span v-if="capturingActionId === action.id">{{ capturedPreview || '按下按键…' }} <span class="kb-cancel-hint">再次点击取消</span></span>
+                                    <span v-else>{{ keybindings.formatKey(keybindings.getBinding(action.id)) }}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="settings-section-actions">
+                        <button class="reset-btn" @click="resetKeybindings()">🔄 重置为默认按键</button>
+                    </div>
+                </div>
+
+                <!-- ── 游戏设置 ── -->
+                <div class="settings-content" v-if="settingsTab === 'game'" @click="cancelRebind">
+                    <div class="settings-scroll-area">
+                        <div class="settings-section">
+                            <h3 class="settings-section-title">✍️ 文字速度</h3>
+                            <p class="settings-section-desc">控制剧情文本的显示速度，数值越小越快。</p>
+                            <div class="setting-slider-row">
+                                <input type="range"
+                                       :min="textSpeedPresets[0].value"
+                                       :max="textSpeedPresets[textSpeedPresets.length-1].value"
+                                       :value="textSpeed"
+                                       step="1"
+                                       @input="updateTextSpeed(parseInt($event.target.value))" />
+                                <span class="setting-value-label">{{ textSpeed }}ms</span>
+                            </div>
+                            <div class="setting-preset-row">
+                                <button v-for="preset in textSpeedPresets" :key="preset.value"
+                                        :class="{ active: textSpeed === preset.value }"
+                                        @click="updateTextSpeed(preset.value)">
+                                    {{ preset.label }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="settings-section-actions">
+                        <button class="reset-btn" @click="resetSettings()">🔄 恢复默认设置</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- 角色名录面板 -->
             <div class="archive-panel-fullscreen" v-if="activeMenuPanel === 'characters'" :style="panelBackgroundStyle">
                 <div class="archive-header-fluid">
@@ -160,7 +230,8 @@
                              v-for="(char, id) in assetsCharacters" :key="id"
                              :class="{ active: activeInspectedCharId === id }"
                              :style="{ '--char-color': char.color, '--char-rgb': hexToRgb(char.color) }"
-                             @click="switchInspectedCharacter(id)">
+                             @click="switchInspectedCharacter(id)"
+                             @mouseenter="switchInspectedCharacter(id)">
                             <div class="nav-mini-avatar">
                                 <img v-if="char.avatars && char.avatars['normal']" :src="char.avatars['normal']">
                             </div>
@@ -206,9 +277,10 @@
                             <div class="expression-matrix-title">形态立绘与表情差分镜像</div>
                             <div class="expression-grid-layout">
                                 <div class="expression-chip"
-                                     v-for="sp in inspectedChar.sprites" :key="sp.id"
-                                     :class="{ active: activeSpriteIdForInspection === sp.id }"
-                                     @click="switchInspectedSprite(sp.id)">
+                                     v-for="(sp, spIdx) in inspectedChar.sprites" :key="sp.id"
+                                     :class="[{ active: activeSpriteIdForInspection === sp.id }, { 'sprite-focused': spIdx === spriteFocusIndex }]"
+                                     @click="switchInspectedSprite(sp.id)"
+                                     @mouseenter="spriteFocusIndex = spIdx">
                                     {{ sp.label }}
                                 </div>
                             </div>
@@ -225,7 +297,10 @@
                 </div>
 
                 <div class="gallery-grid">
-                    <div class="gallery-item" v-for="(cg, id) in assetsCgLibrary" :key="id" @click="clickGalleryItem(id)">
+                    <div class="gallery-item" v-for="(cg, id, idx) in assetsCgLibrary" :key="id"
+                         :class="{ 'gallery-focused': idx === galleryFocusIndex }"
+                         @click="clickGalleryItem(id)"
+                         @mouseenter="galleryFocusIndex = idx">
                         <div v-if="unlockedGalleries[id]" style="width:100%; height:100%;">
                             <img :src="cg.url">
                             <div class="lyric-gallery-label">
@@ -242,8 +317,9 @@
                     <h3>🎬 编年史分歧结局收集</h3>
                     <div class="ending-matrix-grid">
                         <div class="ending-card-badge"
-                             v-for="end in fullEndingsList" :key="end.id"
-                             :class="{ unlocked: unlockedEndings[end.id] }">
+                             v-for="(end, idx) in fullEndingsList" :key="end.id"
+                             :class="{ unlocked: unlockedEndings[end.id], 'gallery-card-focused': gallerySection === 'endings' && endingFocusIndex === idx }"
+                             @mouseenter="gallerySection = 'endings'; endingFocusIndex = idx">
                             <div class="ending-badge-status">
                                 {{ unlockedEndings[end.id] ? "✨ UNLOCKED" : "🔒 LOCKED" }}
                             </div>
@@ -262,8 +338,9 @@
                     <h3>📖 已启程的篇章</h3>
                     <div class="ending-matrix-grid">
                         <div class="ending-card-badge"
-                             v-for="(desc, cid) in chapterDescriptions" :key="cid"
-                             :class="{ unlocked: visitedChapters[cid] }">
+                             v-for="(desc, cid, idx) in chapterDescriptions" :key="cid"
+                             :class="{ unlocked: visitedChapters[cid], 'gallery-card-focused': gallerySection === 'chapters' && chapterFocusIndex === idx }"
+                             @mouseenter="gallerySection = 'chapters'; chapterFocusIndex = idx">
                             <div class="ending-badge-status">
                                 {{ visitedChapters[cid] ? "✅ 已探索" : "🔒 未抵达" }}
                             </div>
@@ -281,13 +358,16 @@
                 <div class="ending-gallery-section" style="border-top: none; padding-top: 10px;">
                     <div class="clear-memories-container">
                         <button class="clear-memories-btn"
-                                :class="{ 'clearing': clearHolding }"
+                                :class="{ 'clearing': clearHolding, 'gallery-card-focused': gallerySection === 'clear' }"
                                 @mousedown.prevent="startClearHold"
                                 @mouseup.prevent="cancelClearHold"
                                 @mouseleave.prevent="cancelClearHold"
                                 @touchstart.prevent="startClearHold"
                                 @touchend.prevent="cancelClearHold"
                                 @touchcancel.prevent="cancelClearHold"
+                                @mouseenter="gallerySection = 'clear'"
+                                @keydown.space.prevent="startClearHold"
+                                @keyup.space.prevent="cancelClearHold"
                                 ref="clearBtnRef">
                             <span class="clear-memories-fill" :style="{ width: clearProgress + '%' }"></span>
                             <span class="clear-memories-text">{{ clearHolding ? '继续按住...' : '🗑️ 清除所有记忆' }}</span>
@@ -303,7 +383,9 @@
                     <button class="close-btn" @click="activeMenuPanel = null">返回主菜单</button>
                 </div>
                 <div class="save-matrix-grid">
-                    <div class="save-slot-card" v-for="slotId in 16" :key="slotId">
+                    <div class="save-slot-card" v-for="slotId in 16" :key="slotId"
+                         :class="{ 'slot-focused': slotFocusIndex === slotId - 1 }"
+                         @mouseenter="slotFocusIndex = slotId - 1">
                         <div class="slot-header-bar" :class="{'has-data': saveSlotsData[slotId]}">
                             <span>SLOT {{ String(slotId).padStart(2, '0') }}</span>
                             <span>{{ saveSlotsData[slotId] ? 'DATA EXIST' : 'EMPTY' }}</span>
@@ -344,7 +426,11 @@
                 <!-- 顶部导航栏 -->
                 <div class="game-top-dock-bar" @click.stop v-show="uiVisible">
                     <div class="dock-left-group">
-                        <button class="dock-action-btn exit-btn" @click="safelyExitToMenu">🚪 退出暂存</button>
+                        <button class="dock-action-btn exit-btn" @click="safelyExitToMenu"
+                                :class="{ 'esc-holding': escHolding }">
+                            <span class="esc-exit-fill" :style="{ width: escHoldProgress + '%' }"></span>
+                            <span class="esc-exit-text">🚪 退出暂存</span>
+                        </button>
                     </div>
                     <div class="dock-right-group">
                         <button class="dock-action-btn" @click="openArchiveSlotsPanel('save')">💾 存入节点</button>
@@ -414,10 +500,15 @@
                 <div class="choices-container" v-if="currentStep && currentStep.type === 'choice' && uiVisible">
                     <div v-for="(choice, index) in availableChoices" :key="index"
                          class="choice-item"
-                         :class="{ 'choice-highlighted': index === highlightedChoiceIndex }"
+                         :class="{
+                             'choice-highlighted': index === highlightedChoiceIndex,
+                             'choice-holding': choiceHolding && index === highlightedChoiceIndex
+                         }"
                          @click.stop="selectChoice(choice)"
                          @mouseenter="highlightedChoiceIndex = index">
-                        {{ choice.text }}
+                        <span class="choice-hold-fill" v-if="choiceHolding && index === highlightedChoiceIndex"
+                              :style="{ width: choiceHoldProgress + '%' }"></span>
+                        <span class="choice-hold-text">{{ choice.text }}</span>
                     </div>
                 </div>
 
@@ -472,7 +563,8 @@
                         <li v-for="(item, i) in gameState.inventory" :key="i"
                             class="clickable-item"
                             :class="{ 'selected-item': selectedBagItemId === item }"
-                            @click.stop="selectItemForInspection(item)">
+                            @click.stop="selectItemForInspection(item)"
+                            @mouseenter="selectItemForInspection(item)">
                             <span class="item-list-icon">
                                 <img v-if="queryItemImage(item)" :src="queryItemImage(item)"
                                      class="item-list-img" @error="e => { e.target.style.display='none'; e.target.parentElement.innerText = queryItemIcon(item); }" />
@@ -504,7 +596,9 @@
                     </div>
 
                     <div class="save-matrix-grid">
-                        <div class="save-slot-card" v-for="slotId in 16" :key="slotId">
+                        <div class="save-slot-card" v-for="slotId in 16" :key="slotId"
+                             :class="{ 'slot-focused': gamePanelSlotFocus === slotId - 1 }"
+                             @mouseenter="gamePanelSlotFocus = slotId - 1">
                             <div class="slot-header-bar" :class="{'has-data': saveSlotsData[slotId]}">
                                 <span>SLOT {{ String(slotId).padStart(2, '0') }}</span>
                                 <span>{{ saveSlotsData[slotId] ? 'DATA EXIST' : 'EMPTY' }}</span>
@@ -539,7 +633,11 @@
                 <div class="ending-screen" v-if="triggeredEnding">
                     <div class="ending-title">{{ triggeredEnding.title }}</div>
                     <div class="ending-desc">{{ triggeredEnding.description }}</div>
-                    <button class="return-main-btn" @click="exitToMenu">确认并返回主菜单</button>
+                    <button class="return-main-btn" @click="exitToMenu"
+                            :class="{ 'ending-holding': endingHolding }">
+                        <span class="ending-hold-fill" :style="{ width: endingHoldProgress + '%' }"></span>
+                        <span class="ending-hold-text">确认并返回主菜单</span>
+                    </button>
                 </div>
 
             </div>

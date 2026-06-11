@@ -137,8 +137,32 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
-.exit-btn { color: rgba(255,107,129,0.85); border-color: rgba(255,107,129,0.2); }
+.exit-btn { position: relative; overflow: hidden; color: rgba(255,107,129,0.85); border-color: rgba(255,107,129,0.2); }
 .exit-btn:hover { background: rgba(255,107,129,0.15); border-color: rgba(255,107,129,0.5); color: #ff6b81; }
+.exit-btn .esc-exit-fill {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    background: rgba(255,60,60,0.25);
+    transition: width 0.03s linear;
+    pointer-events: none;
+    border-radius: inherit;
+}
+.exit-btn .esc-exit-text {
+    position: relative;
+    z-index: 1;
+}
+.exit-btn.esc-holding {
+    border-color: rgba(255,60,60,0.6);
+    animation: escHoldShake 0.08s infinite alternate;
+}
+@keyframes escHoldShake {
+    0%   { transform: translate(-0.5px, 0.3px) rotate(-0.2deg); }
+    25%  { transform: translate(0.5px, -0.3px) rotate(0.2deg); }
+    50%  { transform: translate(-0.3px, 0.5px) rotate(-0.1deg); }
+    75%  { transform: translate(0.3px, -0.5px) rotate(0.1deg); }
+    100% { transform: translate(0.5px, 0.3px) rotate(-0.2deg); }
+}
 
 /* ---------- 角色立绘舞台 ---------- */
 .stage-container {
@@ -227,6 +251,27 @@
     transform: translateX(-8px);
     box-shadow: 0 6px 24px rgba(255,107,129,0.15), 0 0 0 1px rgba(255,107,129,0.1);
     color: #ff6b81;
+}
+.choice-item {
+    position: relative;
+    overflow: hidden;
+}
+.choice-item .choice-hold-fill {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    background: rgba(255,107,129,0.2);
+    transition: width 0.03s linear;
+    pointer-events: none;
+    border-radius: inherit;
+}
+.choice-item .choice-hold-text {
+    position: relative;
+    z-index: 1;
+}
+.choice-item.choice-holding {
+    border-color: #ff6b81;
+    box-shadow: 0 0 20px rgba(255,107,129,0.3), 0 0 0 1px rgba(255,107,129,0.2);
 }
 
 /* ---------- 对话面板 ---------- */
@@ -401,9 +446,26 @@
 @keyframes endingTitleReveal { from{opacity:0; transform:translateY(-20px);} to{opacity:1; transform:translateY(0);} }
 .ending-desc { font-size:1.1rem; color:rgba(255,255,255,0.7); max-width:600px; text-align:center; line-height:1.8; animation:endingDescReveal 1s ease-out 0.8s both; }
 @keyframes endingDescReveal { from{opacity:0;} to{opacity:1;} }
-.return-main-btn { margin-top:20px; padding:14px 40px; font-size:1rem; font-weight:700; color:#fff; background:rgba(255,107,129,0.15); border:1px solid rgba(255,107,129,0.4); border-radius:30px; cursor:pointer; letter-spacing:2px; transition:all 0.3s ease; animation:endingBtnReveal 1s ease-out 1.3s both; }
+.return-main-btn { position:relative; overflow:hidden; margin-top:20px; padding:14px 40px; font-size:1rem; font-weight:700; color:#fff; background:rgba(255,107,129,0.15); border:1px solid rgba(255,107,129,0.4); border-radius:30px; cursor:pointer; letter-spacing:2px; transition:all 0.3s ease; animation:endingBtnReveal 1s ease-out 1.3s both; }
 @keyframes endingBtnReveal { from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
 .return-main-btn:hover { background:#ff6b81; color:#111; box-shadow:0 6px 24px rgba(255,107,129,0.3); }
+.return-main-btn .ending-hold-fill {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    background: rgba(255,255,255,0.15);
+    transition: width 0.03s linear;
+    pointer-events: none;
+    border-radius: inherit;
+}
+.return-main-btn .ending-hold-text {
+    position: relative;
+    z-index: 1;
+}
+.return-main-btn.ending-holding {
+    border-color: #fff;
+    box-shadow: 0 0 30px rgba(255,107,129,0.5), 0 0 0 2px rgba(255,255,255,0.15);
+}
 
 /* ---------- CG 叠加层 ---------- */
 .cg-overlay-viewport { position:absolute; top:0; left:0; width:100%; height:100%; z-index:15; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); }

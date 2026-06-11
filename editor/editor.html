@@ -331,8 +331,264 @@
                 <button class="floating-add-btn" @click="addChapter" title="新建章节 (Ctrl+N)">＋</button>
             </div>
 
+            <!-- 步骤编辑邻接面板 -->
+            <div class="step-detail-panel" v-if="editingStep && selectedChapterId">
+                <div class="step-detail-panel-header">
+                    <span class="section-label">✏️ 步骤 #{{ editingStepIndex + 1 }}</span>
+                    <div class="step-detail-panel-actions">
+                        <button class="tb-btn tb-sm" @click="moveStep(editingStepIndex, -1)" :disabled="editingStepIndex === 0" title="上移">▲</button>
+                        <button class="tb-btn tb-sm" @click="moveStep(editingStepIndex, 1)" :disabled="editingStepIndex >= (editingSteps?.length || 0) - 1" title="下移">▼</button>
+                        <button class="tb-btn tb-sm tb-danger" @click="deleteStep(editingStepIndex)" title="删除步骤">✕</button>
+                    </div>
+                </div>
+                <div class="step-detail-panel-body">
+                    <div class="form-row">
+                        <label>类型</label>
+                        <select v-model="editingStep.type">
+                            <option value="dialogue">对话 (dialogue)</option>
+                            <option value="choice">分支选择 (choice)</option>
+                            <option value="jump">直接跳转 (jump)</option>
+                            <option value="ending">结局触发 (ending)</option>
+                        </select>
+                    </div>
+                    <template v-if="editingStep.type === 'dialogue'">
+                        <div class="form-row">
+                            <label>场景</label>
+                            <select v-model="editingStep.sceneId">
+                                <option value="">(无场景)</option>
+                                <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label>说话人</label>
+                            <select v-model="editingStep.characterId">
+                                <option value="">(旁白/叙述)</option>
+                                <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label>对话文本</label>
+                            <template v-if="!editingStep.texts">
+                                <textarea v-model="editingStep.text" rows="4" placeholder="输入对话或叙述文本..."></textarea>
+                                <button class="tb-btn tb-sm" @click="addBatchTextSegment" style="margin-top:6px;">📚 多段文本</button>
+                            </template>
+                            <template v-else>
+                                <div class="batch-text-list">
+                                    <div v-for="(t, ti) in editingStep.texts" :key="ti" class="batch-text-item">
+                                        <div class="batch-text-item-header">
+                                            <span class="batch-text-index">第{{ ti + 1 }}段</span>
+                                            <button v-if="editingStep.texts.length > 1" class="step-btn step-btn-del" @click="removeBatchTextSegment(ti)">✕</button>
+                                        </div>
+                                        <textarea v-model="editingStep.texts[ti]" rows="3"></textarea>
+                                    </div>
+                                    <div class="batch-text-actions">
+                                        <button class="tb-btn tb-sm" @click="addBatchTextSegment">➕ 添加</button>
+                                        <button class="tb-btn tb-sm" @click="disableBatchText">⬅ 合并</button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        <div class="form-row">
+                            <label>屏幕特效</label>
+                            <input type="text" v-model="editingStep.screenEffect" placeholder="snow?density=30" />
+                        </div>
+                        <div class="form-row">
+                            <label>CG 变更</label>
+                            <div class="cg-change-group">
+                                <select v-model="editingStep._cgAction" @change="onCGChange">
+                                    <option value="">(无)</option>
+                                    <option value="enter">进入 CG</option>
+                                    <option value="leave">离开 CG</option>
+                                </select>
+                                <select v-if="editingStep._cgAction === 'enter'" v-model="editingStep._cgId" @change="onCGChange">
+                                    <option value="">选择 CG...</option>
+                                    <option v-for="(cg, cgid) in gameCgLibrary" :key="cgid" :value="cgid">{{ cg.title }}</option>
+                                </select>
+                                <input v-if="editingStep._cgAction" type="text" v-model="editingStep._cgAnimation" @change="onCGChange" placeholder="动画" />
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <label>角色变更</label>
+                            <div class="char-changes-list">
+                                <div v-for="(cc, cci) in (editingStep._charChanges || [])" :key="cci" class="char-change-row">
+                                    <select v-model="cc.id" @change="onCharChangeField">
+                                        <option value="">选择角色...</option>
+                                        <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+                                    </select>
+                                    <select v-model="cc.action" @change="onCharChangeField">
+                                        <option value="enter">入场</option>
+                                        <option value="update">更新</option>
+                                        <option value="leave">退场</option>
+                                    </select>
+                                    <select v-if="cc.action !== 'leave'" v-model="cc.spriteId" @change="onCharChangeField">
+                                        <option value="">默认立绘</option>
+                                        <option v-for="(sp, sid) in getCharSprites(cc.id)" :key="sid" :value="sid">{{ sp.label }}</option>
+                                    </select>
+                                    <input type="text" v-model="cc.animation" placeholder="动画" class="cc-anim" @change="onCharChangeField" />
+                                    <button class="step-btn step-btn-del" @click="removeCharChange(cci)">✕</button>
+                                </div>
+                                <button class="tb-btn tb-sm" @click="addCharChange">➕ 角色变更</button>
+                            </div>
+                        </div>
+                        <div class="form-row form-row-2col">
+                            <div class="form-col">
+                                <label>获得物品</label>
+                                <select v-model="editingStep.gainItem">
+                                    <option value="">(无)</option>
+                                    <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
+                                </select>
+                            </div>
+                            <div class="form-col">
+                                <label>获得方式</label>
+                                <select v-model="editingStep.gainApproach" :disabled="!editingStep.gainItem">
+                                    <option value="find">寻获</option>
+                                    <option value="receive">赠予</option>
+                                    <option value="unlock">解锁</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row form-row-2col">
+                            <div class="form-col">
+                                <label>Flag</label>
+                                <input type="text" v-model="editingStep.flag" placeholder="flag 名称" />
+                            </div>
+                            <div class="form-col">
+                                <label>打字速度 (ms)</label>
+                                <input type="number" v-model="editingStep.speed" placeholder="25" min="1" />
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <label>环境特效</label>
+                            <div class="effects-picker">
+                                <label v-for="ef in availableEffects" :key="ef" class="effect-check">
+                                    <input type="checkbox" :value="ef"
+                                           :checked="(editingStep.effects || []).includes(ef)"
+                                           @change="toggleEffect(ef)" />
+                                    {{ ef }}
+                                </label>
+                            </div>
+                        </div>
+                    </template>
+                    <template v-if="editingStep.type === 'choice'">
+                        <div class="form-row">
+                            <label>场景</label>
+                            <select v-model="editingStep.sceneId">
+                                <option value="">(无场景)</option>
+                                <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label>分支提示文本</label>
+                            <textarea v-model="editingStep.text" rows="2" placeholder="面对眼前的抉择..."></textarea>
+                        </div>
+                        <div class="form-row">
+                            <label>分支选项</label>
+                            <div class="choices-editor">
+                                <div v-for="(choice, ci) in (editingStep.choices || [])" :key="ci" class="choice-item-edit">
+                                    <div class="choice-header">
+                                        <strong>选项 #{{ ci + 1 }}</strong>
+                                        <button class="step-btn step-btn-del" @click="removeChoice(ci)">✕</button>
+                                    </div>
+                                    <input type="text" v-model="choice.text" placeholder="选项文本" class="choice-text" />
+                                    <div class="choice-detail-row">
+                                        <select v-model="choice.jumpChapter" class="choice-jump">
+                                            <option value="">跳转到...</option>
+                                            <optgroup label="章节">
+                                                <option v-for="(_, cid) in chapters" :key="cid" :value="cid">{{ cid }}</option>
+                                            </optgroup>
+                                            <optgroup label="结局">
+                                                <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">🎬 {{ end.title }} ({{ end.id }})</option>
+                                            </optgroup>
+                                        </select>
+                                        <input type="text" v-model="choice.flag" placeholder="flag" class="choice-flag" />
+                                    </div>
+                                </div>
+                                <button class="tb-btn tb-sm" @click="addChoice">➕ 添加选项</button>
+                            </div>
+                        </div>
+                    </template>
+                    <template v-if="editingStep.type === 'jump'">
+                        <div v-if="!editingStep._jumpMode">{{ setDefaultJumpMode(editingStep) }}</div>
+                        <div class="form-row">
+                            <label>跳转类型</label>
+                            <div class="jump-mode-toggle">
+                                <label class="toggle-option" :class="{ active: editingStep._jumpMode === 'chapter' }">
+                                    <input type="radio" value="chapter" v-model="editingStep._jumpMode" @change="editingStep.endingId = ''" />
+                                    ⤵ 跳转到章节
+                                </label>
+                                <label class="toggle-option" :class="{ active: editingStep._jumpMode === 'ending' }">
+                                    <input type="radio" value="ending" v-model="editingStep._jumpMode" @change="editingStep.jumpChapter = ''" />
+                                    🎬 触发结局
+                                </label>
+                            </div>
+                        </div>
+                        <template v-if="editingStep._jumpMode === 'chapter'">
+                            <div class="form-row">
+                                <label>目标章节</label>
+                                <select v-model="editingStep.jumpChapter">
+                                    <option value="">选择目标...</option>
+                                    <optgroup label="章节">
+                                        <option v-for="(_, cid) in chapters" :key="cid" :value="cid">{{ cid }}</option>
+                                    </optgroup>
+                                    <optgroup label="结局（快捷）">
+                                        <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">🎬 {{ end.title }} ({{ end.id }})</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                        </template>
+                        <template v-if="editingStep._jumpMode === 'ending'">
+                            <div class="form-row">
+                                <label>触发结局</label>
+                                <select v-model="editingStep.endingId">
+                                    <option value="">选择结局...</option>
+                                    <option v-for="end in gameEndings" :key="end.id" :value="end.id">🎬 {{ end.title }} ({{ end.id }})</option>
+                                </select>
+                            </div>
+                        </template>
+                        <div class="form-row form-row-2col">
+                            <div class="form-col">
+                                <label>获得物品</label>
+                                <select v-model="editingStep.gainItem">
+                                    <option value="">(无)</option>
+                                    <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
+                                </select>
+                            </div>
+                            <div class="form-col">
+                                <label>获得方式</label>
+                                <select v-model="editingStep.gainApproach" :disabled="!editingStep.gainItem">
+                                    <option value="find">寻获</option>
+                                    <option value="receive">赠予</option>
+                                    <option value="unlock">解锁</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <label>Flag</label>
+                            <input type="text" v-model="editingStep.flag" placeholder="flag 名称" />
+                        </div>
+                    </template>
+                    <template v-if="editingStep.type === 'ending'">
+                        <div class="form-row">
+                            <label>触发结局</label>
+                            <select v-model="editingStep.endingId">
+                                <option value="">选择结局...</option>
+                                <option v-for="end in gameEndings" :key="end.id" :value="end.id">🎬 {{ end.title }} ({{ end.id }})</option>
+                            </select>
+                            <div v-if="editingStep.endingId" class="ending-preview" style="margin-top:6px">
+                                <div class="ending-preview-title">{{ (gameEndings.find(e => e.id === editingStep.endingId) || {}).title }}</div>
+                                <div class="ending-preview-desc">{{ (gameEndings.find(e => e.id === editingStep.endingId) || {}).description }}</div>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <label>Flag</label>
+                            <input type="text" v-model="editingStep.flag" placeholder="flag 名称" />
+                        </div>
+                    </template>
+                </div>
+            </div>
+
             <!-- 面板拖拽调整宽度手柄 -->
-            <div class="panel-resize-handle" v-if="selectedChapterId && !detailPanelCollapsed"
+            <div class="panel-resize-handle" v-if="(selectedChapterId || selectedEndingId || selectedGroupId) && !detailPanelCollapsed"
                  @mousedown="startPanelResize" data-tooltip="拖动调整面板宽度"></div>
 
             <!-- 右侧：编辑面板 -->
@@ -341,9 +597,6 @@
                         :data-tooltip="detailPanelCollapsed ? '展开编辑面板' : '收起编辑面板'">
                     {{ detailPanelCollapsed ? '◀' : '▶' }}
                 </button>
-
-                <!-- 章节编辑内容 -->
-                <template v-if="selectedChapterId">
 
                 <!-- 结局编辑内容 -->
                 <template v-if="selectedEndingId">
@@ -392,6 +645,9 @@
                     </div>
                 </div>
                 </template>
+
+                <!-- 章节编辑内容 -->
+                <template v-if="selectedChapterId">
                 <div class="detail-header">
                     <h2>
                         <span class="detail-icon">📜</span>
@@ -399,7 +655,6 @@
                                @change="onChapterIdChange" placeholder="chapter_id" />
                     </h2>
                     <div class="detail-header-actions">
-                        <button class="tb-btn tb-sm" @click="addStep" title="添加步骤">➕ 添加步骤</button>
                         <button class="tb-btn tb-sm tb-danger" @click="deleteChapter" title="删除章节">🗑️ 删除章节</button>
                     </div>
                 </div>
@@ -423,7 +678,10 @@
                     </div>
 
                     <!-- 步骤列表 -->
-                    <div class="section-label">📝 步骤列表（拖拽排序）</div>
+                    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+                        <span>📝 步骤列表（拖拽排序）</span>
+                        <button class="tb-btn tb-sm" @click="addStep" title="添加步骤">➕</button>
+                    </div>
                     <div class="step-list" ref="stepList">
                         <div v-for="(step, idx) in editingSteps" :key="idx"
                              class="step-card"
@@ -432,10 +690,19 @@
                                  'step-choice': step.type === 'choice',
                                  'step-ending': step.type === 'jump' && step.endingId || step.type === 'ending',
                                  'step-jump': step.type === 'jump',
-                                 'step-active': editingStepIndex === idx
+                                 'step-active': editingStepIndex === idx,
+                                 'step-dragging': detailStepDrag.dragIndex === idx,
+                                 'step-dragover': detailStepDrag.dropIndex === idx && detailStepDrag.dragIndex !== idx,
+                                 'step-locked': isStepLocked(editingSteps, idx)
                              }"
+                             :draggable="!isStepLocked(editingSteps, idx)"
+                             @dragstart="detailStepDragStart($event, idx)"
+                             @dragover="detailStepDragOver($event, idx)"
+                             @drop="detailStepDrop($event, idx)"
+                             @dragend="detailStepDragEnd"
                              @click="selectStep(idx)">
                             <div class="step-card-header">
+                                <span class="drag-handle" v-if="!isStepLocked(editingSteps, idx)">⠿</span>
                                 <span class="step-type-badge"
                                       :class="step.type === 'ending' || (step.type === 'jump' && step.endingId) ? 'badge-ending' : 'badge-' + (step.type || 'dialogue')">
                                     {{ stepTypeLabel(step.type, step) }}
@@ -447,6 +714,7 @@
                                     <button class="step-btn" @click.stop="moveStep(idx, 1)" :disabled="idx === editingSteps.length - 1" title="下移">▼</button>
                                     <button class="step-btn step-btn-del" @click.stop="deleteStep(idx)" title="删除">✕</button>
                                 </div>
+                                <span class="lock-icon" v-if="isStepLocked(editingSteps, idx)" title="末尾路由步骤，不可移动">🔒</span>
                             </div>
                             <div class="step-card-body">
                                 <div class="step-text-preview">{{ stepTextBrief(step) }}</div>
@@ -457,324 +725,8 @@
                             暂无步骤，点击"添加步骤"开始编辑
                         </div>
                     </div>
-
-                    <!-- 步骤编辑器 -->
-                    <div class="step-editor" v-if="editingStep">
-                        <div class="section-label">✏️ 编辑步骤 #{{ editingStepIndex + 1 }}</div>
-
-                        <!-- 步骤类型选择 -->
-                        <div class="form-row">
-                            <label>类型</label>
-                            <select v-model="editingStep.type">
-                                <option value="dialogue">对话 (dialogue)</option>
-                                <option value="choice">分支选择 (choice)</option>
-                                <option value="jump">直接跳转 (jump)</option>
-                                <option value="ending">结局触发 (ending)</option>
-                            </select>
-                        </div>
-
-                        <!-- === 对话类型编辑器 === -->
-                        <template v-if="editingStep.type === 'dialogue'">
-                            <div class="form-row">
-                                <label>场景</label>
-                                <select v-model="editingStep.sceneId">
-                                    <option value="">(无场景)</option>
-                                    <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
-                                </select>
-                            </div>
-                            <div class="form-row">
-                                <label>说话人</label>
-                                <select v-model="editingStep.characterId">
-                                    <option value="">(旁白/叙述)</option>
-                                    <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
-                                </select>
-                            </div>
-                            <div class="form-row">
-                                <label>对话文本</label>
-                                <!-- 单段模式 -->
-                                <template v-if="!editingStep.texts">
-                                    <textarea v-model="editingStep.text" rows="4" placeholder="输入对话或叙述文本..."></textarea>
-                                    <button class="tb-btn tb-sm" @click="addBatchTextSegment" style="margin-top:6px;">📚 批处理 — 多段文本</button>
-                                </template>
-                                <!-- 批处理模式 -->
-                                <template v-else>
-                                    <div class="batch-text-list">
-                                        <div v-for="(t, ti) in editingStep.texts" :key="ti" class="batch-text-item">
-                                            <div class="batch-text-item-header">
-                                                <span class="batch-text-index">第{{ ti + 1 }}段</span>
-                                                <button v-if="editingStep.texts.length > 1" class="step-btn step-btn-del" @click="removeBatchTextSegment(ti)" title="删除此段">✕</button>
-                                            </div>
-                                            <textarea v-model="editingStep.texts[ti]" rows="3" :placeholder="'输入第' + (ti+1) + '段文本...'"></textarea>
-                                        </div>
-                                        <div class="batch-text-actions">
-                                            <button class="tb-btn tb-sm" @click="addBatchTextSegment">➕ 添加文本段</button>
-                                            <button class="tb-btn tb-sm" @click="disableBatchText">⬅ 合并为单段</button>
-                                        </div>
-                                    </div>
-                                    <div class="step-texts-info">
-                                        📚 {{ editingStep.texts.length }}段批处理文本（引擎将作为连续流处理，减少步骤开销）
-                                    </div>
-                                </template>
-                            </div>
-                            <div class="form-row">
-                                <label>屏幕特效</label>
-                                <input type="text" v-model="editingStep.screenEffect"
-                                       placeholder="例如：snow?density=30 或 corruption?density=25" />
-                            </div>
-                            <div class="form-row">
-                                <label>CG 变更</label>
-                                <div class="cg-change-group">
-                                    <select v-model="editingStep._cgAction" @change="onCGChange">
-                                        <option value="">(无 CG 变更)</option>
-                                        <option value="enter">进入 CG</option>
-                                        <option value="leave">离开 CG</option>
-                                    </select>
-                                    <select v-if="editingStep._cgAction === 'enter'" v-model="editingStep._cgId"
-                                            @change="onCGChange">
-                                        <option value="">选择 CG...</option>
-                                        <option v-for="(cg, cgid) in gameCgLibrary" :key="cgid" :value="cgid">{{ cg.title }}</option>
-                                    </select>
-                                    <input v-if="editingStep._cgAction" type="text" v-model="editingStep._cgAnimation"
-                                           @change="onCGChange"
-                                           placeholder="动画：scaleIn / fadeOut / pulse" />
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <label>角色变更</label>
-                                <div class="char-changes-list">
-                                    <div v-for="(cc, cci) in (editingStep._charChanges || [])" :key="cci" class="char-change-row">
-                                        <select v-model="cc.id" @change="onCharChangeField">
-                                            <option value="">选择角色...</option>
-                                            <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
-                                        </select>
-                                        <select v-model="cc.action" @change="onCharChangeField">
-                                            <option value="enter">入场</option>
-                                            <option value="update">更新</option>
-                                            <option value="leave">退场</option>
-                                        </select>
-                                        <select v-model="cc.spriteId" v-if="cc.action !== 'leave'" @change="onCharChangeField">
-                                            <option value="">默认立绘</option>
-                                            <option v-for="(sp, sid) in getCharSprites(cc.id)" :key="sid" :value="sid">{{ sp.label }}</option>
-                                        </select>
-                                        <input type="text" v-model="cc.animation" placeholder="动画" class="cc-anim" @change="onCharChangeField" />
-                                        <button class="step-btn step-btn-del" @click="removeCharChange(cci)">✕</button>
-                                    </div>
-                                    <button class="tb-btn tb-sm" @click="addCharChange">➕ 添加角色变更</button>
-                                </div>
-                            </div>
-                            <div class="form-row form-row-3col">
-                                <div class="form-col">
-                                    <label>获得物品</label>
-                                    <select v-model="editingStep.gainItem">
-                                        <option value="">(无)</option>
-                                        <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
-                                    </select>
-                                </div>
-                                <div class="form-col">
-                                    <label>获得方式</label>
-                                    <select v-model="editingStep.gainApproach" :disabled="!editingStep.gainItem">
-                                        <option value="find">寻获</option>
-                                        <option value="receive">赠予</option>
-                                        <option value="unlock">解锁</option>
-                                    </select>
-                                </div>
-                                <div class="form-col">
-                                    <label>设置 Flag</label>
-                                    <input type="text" v-model="editingStep.flag" placeholder="flag 名称" />
-                                </div>
-                            </div>
-                            <div class="form-row form-row-3col">
-                                <div class="form-col">
-                                    <label>失去物品</label>
-                                    <select v-model="editingStep.loseItem">
-                                        <option value="">(无)</option>
-                                        <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
-                                    </select>
-                                </div>
-                                <div class="form-col">
-                                    <label>失去方式</label>
-                                    <select v-model="editingStep.loseApproach" :disabled="!editingStep.loseItem">
-                                        <option value="use">消耗</option>
-                                        <option value="destroy">损毁</option>
-                                        <option value="handOver">交出</option>
-                                    </select>
-                                </div>
-                                <div class="form-col">
-                                    <label>打字速度 (ms)</label>
-                                    <input type="number" v-model="editingStep.speed" placeholder="默认 25" min="1" />
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <label>环境特效</label>
-                                <div class="effects-picker">
-                                    <label v-for="ef in availableEffects" :key="ef" class="effect-check">
-                                        <input type="checkbox" :value="ef"
-                                               :checked="(editingStep.effects || []).includes(ef)"
-                                               @change="toggleEffect(ef)" />
-                                        {{ ef }}
-                                    </label>
-                                </div>
-                            </div>
-                        </template>
-
-                        <!-- === 分支选择编辑器 === -->
-                        <template v-if="editingStep.type === 'choice'">
-                            <div class="form-row">
-                                <label>场景</label>
-                                <select v-model="editingStep.sceneId">
-                                    <option value="">(无场景)</option>
-                                    <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
-                                </select>
-                            </div>
-                            <div class="form-row">
-                                <label>分支提示文本</label>
-                                <textarea v-model="editingStep.text" rows="2" placeholder="例如：面对眼前的抉择，你选择..."></textarea>
-                            </div>
-                            <div class="form-row">
-                                <label>分支选项</label>
-                                <div class="choices-editor">
-                                    <div v-for="(choice, ci) in (editingStep.choices || [])" :key="ci" class="choice-item-edit">
-                                        <div class="choice-header">
-                                            <strong>选项 #{{ ci + 1 }}</strong>
-                                            <button class="step-btn step-btn-del" @click="removeChoice(ci)">✕</button>
-                                        </div>
-                                        <input type="text" v-model="choice.text" placeholder="选项文本" class="choice-text" />
-                                        <div class="choice-detail-row">
-                                            <select v-model="choice.jumpChapter" class="choice-jump">
-                                                <option value="">跳转到...</option>
-                                                <optgroup label="章节">
-                                                    <option v-for="(_, cid) in chapters" :key="cid" :value="cid">{{ cid }}</option>
-                                                </optgroup>
-                                                <optgroup label="结局">
-                                                    <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">
-                                                        🎬 {{ end.title }} ({{ end.id }})
-                                                    </option>
-                                                </optgroup>
-                                            </select>
-                                            <input type="text" v-model="choice.flag" placeholder="flag" class="choice-flag" />
-                                            <select v-model="choice.gainItem" class="choice-item">
-                                                <option value="">获得物品...</option>
-                                                <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <button class="tb-btn tb-sm" @click="addChoice">➕ 添加选项</button>
-                                </div>
-                            </div>
-                        </template>
-
-                        <!--
-                          ===== 跳转编辑器 =====
-                          jump_step 内部可派生出两种行为：
-                            1. 常规跳转 (jumpChapter) → 立即跳转到目标章节
-                            2. 结局触发 (endingId)   → jump_step 的派生（ending_trigger），
-                                                      展示结局描述后触发结局画面
-                        -->
-                        <template v-if="editingStep.type === 'jump'">
-                            <!-- jump_step 模式切换：常规跳转 / ending_trigger 派生 -->
-                            <div v-if="!editingStep._jumpMode" data-init-mode>
-                                {{ setDefaultJumpMode(editingStep) }}
-                            </div>
-                            <div class="form-row">
-                                <label>跳转类型</label>
-                                <div class="jump-mode-toggle">
-                                    <label class="toggle-option" :class="{ active: editingStep._jumpMode === 'chapter' }">
-                                        <input type="radio" value="chapter" v-model="editingStep._jumpMode"
-                                               @change="editingStep.endingId = ''" />
-                                        ⤵ 跳转到章节
-                                    </label>
-                                    <label class="toggle-option" :class="{ active: editingStep._jumpMode === 'ending' }">
-                                        <input type="radio" value="ending" v-model="editingStep._jumpMode"
-                                               @change="editingStep.jumpChapter = ''" />
-                                        🎬 触发结局（带描述展示）
-                                    </label>
-                                </div>
-                            </div>
-                            <!-- 常规跳转：目标章节 -->
-                            <template v-if="editingStep._jumpMode === 'chapter'">
-                                <div class="form-row">
-                                    <label>目标章节</label>
-                                    <select v-model="editingStep.jumpChapter">
-                                        <option value="">选择目标章节...</option>
-                                        <optgroup label="章节">
-                                            <option v-for="(_, cid) in chapters" :key="cid" :value="cid">{{ cid }}</option>
-                                        </optgroup>
-                                        <optgroup label="结局（快捷跳转）">
-                                            <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">
-                                                🎬 {{ end.title }} ({{ end.id }})
-                                            </option>
-                                        </optgroup>
-                                    </select>
-                                </div>
-                            </template>
-                            <!-- 结局触发：选择结局（jump_step 的 ending_trigger 派生） -->
-                            <template v-if="editingStep._jumpMode === 'ending'">
-                                <div class="form-row">
-                                    <label>触发结局</label>
-                                    <select v-model="editingStep.endingId">
-                                        <option value="">选择结局...</option>
-                                        <option v-for="end in gameEndings" :key="end.id" :value="end.id">
-                                            🎬 {{ end.title }} ({{ end.id }})
-                                        </option>
-                                    </select>
-                                    <div v-if="editingStep.endingId" class="ending-preview" style="margin-top:6px">
-                                        <div class="ending-preview-title">{{ (gameEndings.find(e => e.id === editingStep.endingId) || {}).title }}</div>
-                                        <div class="ending-preview-desc">{{ (gameEndings.find(e => e.id === editingStep.endingId) || {}).description }}</div>
-                                    </div>
-                                </div>
-                            </template>
-                            <div class="form-row">
-                                <label>设置 Flag（可选）</label>
-                                <input type="text" v-model="editingStep.flag" placeholder="flag 名称" />
-                            </div>
-                            <div class="form-row form-row-2col">
-                                <div class="form-col">
-                                    <label>获得物品</label>
-                                    <select v-model="editingStep.gainItem">
-                                        <option value="">(无)</option>
-                                        <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
-                                    </select>
-                                </div>
-                                <div class="form-col">
-                                    <label>获得方式</label>
-                                    <select v-model="editingStep.gainApproach" :disabled="!editingStep.gainItem">
-                                        <option value="find">寻获</option>
-                                        <option value="receive">赠予</option>
-                                        <option value="unlock">解锁</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="settings-note" style="margin-top:4px">
-                                ⚡ 跳转步骤无对话、无交互，到达后立即执行跳转。适合用作剧情路由。<br>
-                                🎬 "结局触发"是跳转步骤的派生变体：先展示结局描述文本，再触发结局画面。
-                            </div>
-                        </template>
-
-                        <!-- === 结局触发编辑器 === -->
-                        <template v-if="editingStep.type === 'ending'">
-                            <div class="form-row">
-                                <label>触发结局</label>
-                                <select v-model="editingStep.endingId">
-                                    <option value="">选择结局...</option>
-                                    <option v-for="end in gameEndings" :key="end.id" :value="end.id">
-                                        🎬 {{ end.title }} ({{ end.id }})
-                                    </option>
-                                </select>
-                                <div v-if="editingStep.endingId" class="ending-preview" style="margin-top:6px">
-                                    <div class="ending-preview-title">{{ (gameEndings.find(e => e.id === editingStep.endingId) || {}).title }}</div>
-                                    <div class="ending-preview-desc">{{ (gameEndings.find(e => e.id === editingStep.endingId) || {}).description }}</div>
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <label>设置 Flag（可选）</label>
-                                <input type="text" v-model="editingStep.flag" placeholder="flag 名称" />
-                            </div>
-                            <div class="settings-note" style="margin-top:4px">
-                                🎬 结局触发步骤：展示结局描述文本后触发结局画面。与跳转步骤不同，此步骤明确标识为结局触发类型。
-                            </div>
-                        </template>
-                    </div>
                 </div>
+
                 </template><!-- /selectedChapterId -->
 
                 <!-- 分组编辑内容 -->
@@ -956,6 +908,8 @@
                 <div class="modal-body resource-body">
                     <!-- 标签栏 -->
                     <div class="resource-tabs">
+                        <div class="resource-tab" :class="{ active: resourceTab === 'chapters' }"
+                             @click="resourceTab = 'chapters'; selectedResourceId = null">📜 章节</div>
                         <div class="resource-tab" :class="{ active: resourceTab === 'characters' }"
                              @click="resourceTab = 'characters'; selectedResourceId = null">👤 角色</div>
                         <div class="resource-tab" :class="{ active: resourceTab === 'scenes' }"
@@ -1222,10 +1176,330 @@
                                     </div>
                                 </template>
 
+                                <!-- === 章节编辑器（含步骤管理） === -->
+                                <template v-if="resourceTab === 'chapters'">
+                                    <div class="section-label">📜 章节信息</div>
+                                    <div class="form-row">
+                                        <label>章节 ID</label>
+                                        <div class="rename-row">
+                                            <input type="text" v-model="selectedResource._renameId" :placeholder="selectedResourceId" />
+                                            <button class="tb-btn tb-sm" @click="renameResource('chapters', selectedResourceId)">↻ 重命名</button>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <label>章节简介</label>
+                                        <textarea v-model="chapterDescriptions[selectedResourceId]"
+                                                  rows="4" placeholder="为这个章节编写简介..."></textarea>
+                                    </div>
+                                    <div class="section-label">
+                                        📝 步骤列表（{{ selectedResource._steps?.length || 0 }} 步）
+                                        <button class="tb-btn tb-sm" @click="resEditAddStep" style="margin-left:8px" title="添加步骤">➕</button>
+                                    </div>
+                                    <div class="resource-chapter-steps">
+                                        <div v-for="(step, si) in selectedResource._steps" :key="si"
+                                             class="resource-step-item"
+                                             :class="{
+                                                 'res-step-active': resEditStepIndex === si,
+                                                 'res-step-dragging': resStepDrag.dragIndex === si,
+                                                 'res-step-dragover': resStepDrag.dropIndex === si && resStepDrag.dragIndex !== si,
+                                                 'res-step-locked': isStepLocked(selectedResource._steps, si)
+                                             }"
+                                             :draggable="!isStepLocked(selectedResource._steps, si)"
+                                             @dragstart="resStepDragStart($event, si)"
+                                             @dragover="resStepDragOver($event, si)"
+                                             @drop="resStepDrop($event, si)"
+                                             @dragend="resStepDragEnd"
+                                             @click="resEditStepIndex = si">
+                                            <span class="drag-handle" v-if="!isStepLocked(selectedResource._steps, si)">⠿</span>
+                                            <span class="step-type-badge"
+                                                  :class="step.type === 'ending' || (step.type === 'jump' && step.endingId) ? 'badge-ending' : 'badge-' + (step.type || 'dialogue')">
+                                                {{ stepTypeLabel(step.type, step) }}
+                                            </span>
+                                            <span class="step-text-preview" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ stepTextBrief(step) }}</span>
+                                            <span class="step-idx">{{ si + 1 }}</span>
+                                            <span class="lock-icon" v-if="isStepLocked(selectedResource._steps, si)" title="末尾路由步骤，不可移动">🔒</span>
+                                        </div>
+                                        <div class="resource-list-empty" v-if="!selectedResource._steps?.length">
+                                            暂无步骤，点击上方「➕」添加步骤
+                                        </div>
+                                    </div>
+                                </template>
+
                                 <!-- 删除按钮 -->
                                 <div style="margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border-color);">
                                     <button class="tb-btn tb-danger" @click="deleteResource(resourceTab, selectedResourceId)">🗑️ 删除此资源</button>
                                 </div>
+                            </div>
+
+                            <!-- 右侧：步骤编辑面板（仅章节 tab） -->
+                            <div class="resource-step-editor" v-if="resEditStep && resourceTab === 'chapters'">
+                                <div class="step-editor-header">
+                                    <span class="section-label">✏️ 步骤 #{{ resEditStepIndex + 1 }}</span>
+                                    <div class="step-editor-header-actions">
+                                        <button class="tb-btn tb-sm" @click="resEditMoveStep(-1)" :disabled="resEditStepIndex === 0" title="上移">▲</button>
+                                        <button class="tb-btn tb-sm" @click="resEditMoveStep(1)" :disabled="resEditStepIndex >= (selectedResource._steps?.length || 0) - 1" title="下移">▼</button>
+                                        <button class="tb-btn tb-sm tb-danger" @click="resEditDeleteStep" title="删除步骤">✕</button>
+                                    </div>
+                                </div>
+                                <div class="step-editor-body">
+
+                                <!-- 步骤类型 -->
+                                <div class="form-row">
+                                    <label>类型</label>
+                                    <select v-model="resEditStep.type">
+                                        <option value="dialogue">对话 (dialogue)</option>
+                                        <option value="choice">分支选择 (choice)</option>
+                                        <option value="jump">直接跳转 (jump)</option>
+                                        <option value="ending">结局触发 (ending)</option>
+                                    </select>
+                                </div>
+
+                                <!-- === 对话类型 === -->
+                                <template v-if="resEditStep.type === 'dialogue'">
+                                    <div class="form-row">
+                                        <label>场景</label>
+                                        <select v-model="resEditStep.sceneId">
+                                            <option value="">(无场景)</option>
+                                            <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-row">
+                                        <label>说话人</label>
+                                        <select v-model="resEditStep.characterId">
+                                            <option value="">(旁白/叙述)</option>
+                                            <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-row">
+                                        <label>对话文本</label>
+                                        <template v-if="!resEditStep.texts">
+                                            <textarea v-model="resEditStep.text" rows="4" placeholder="输入对话或叙述文本..."></textarea>
+                                            <button class="tb-btn tb-sm" @click="resEditAddBatchTextSegment" style="margin-top:6px;">📚 多段文本</button>
+                                        </template>
+                                        <template v-else>
+                                            <div class="batch-text-list">
+                                                <div v-for="(t, ti) in resEditStep.texts" :key="ti" class="batch-text-item">
+                                                    <div class="batch-text-item-header">
+                                                        <span class="batch-text-index">第{{ ti + 1 }}段</span>
+                                                        <button v-if="resEditStep.texts.length > 1" class="step-btn step-btn-del" @click="resEditRemoveBatchTextSegment(ti)">✕</button>
+                                                    </div>
+                                                    <textarea v-model="resEditStep.texts[ti]" rows="3"></textarea>
+                                                </div>
+                                                <div class="batch-text-actions">
+                                                    <button class="tb-btn tb-sm" @click="resEditAddBatchTextSegment">➕ 添加</button>
+                                                    <button class="tb-btn tb-sm" @click="resEditDisableBatchText">⬅ 合并</button>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <div class="form-row">
+                                        <label>屏幕特效</label>
+                                        <input type="text" v-model="resEditStep.screenEffect" placeholder="snow?density=30" />
+                                    </div>
+                                    <div class="form-row">
+                                        <label>CG 变更</label>
+                                        <div class="cg-change-group">
+                                            <select v-model="resEditStep._cgAction" @change="resEditOnCGChange">
+                                                <option value="">(无)</option>
+                                                <option value="enter">进入 CG</option>
+                                                <option value="leave">离开 CG</option>
+                                            </select>
+                                            <select v-if="resEditStep._cgAction === 'enter'" v-model="resEditStep._cgId" @change="resEditOnCGChange">
+                                                <option value="">选择 CG...</option>
+                                                <option v-for="(cg, cgid) in gameCgLibrary" :key="cgid" :value="cgid">{{ cg.title }}</option>
+                                            </select>
+                                            <input v-if="resEditStep._cgAction" type="text" v-model="resEditStep._cgAnimation" @change="resEditOnCGChange" placeholder="动画" />
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <label>角色变更</label>
+                                        <div class="char-changes-list">
+                                            <div v-for="(cc, cci) in (resEditStep._charChanges || [])" :key="cci" class="char-change-row">
+                                                <select v-model="cc.id" @change="resEditOnCharChangeField">
+                                                    <option value="">选择角色...</option>
+                                                    <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+                                                </select>
+                                                <select v-model="cc.action" @change="resEditOnCharChangeField">
+                                                    <option value="enter">入场</option>
+                                                    <option value="update">更新</option>
+                                                    <option value="leave">退场</option>
+                                                </select>
+                                                <select v-if="cc.action !== 'leave'" v-model="cc.spriteId" @change="resEditOnCharChangeField">
+                                                    <option value="">默认立绘</option>
+                                                    <option v-for="(sp, sid) in getCharSprites(cc.id)" :key="sid" :value="sid">{{ sp.label }}</option>
+                                                </select>
+                                                <input type="text" v-model="cc.animation" placeholder="动画" class="cc-anim" @change="resEditOnCharChangeField" />
+                                                <button class="step-btn step-btn-del" @click="resEditRemoveCharChange(cci)">✕</button>
+                                            </div>
+                                            <button class="tb-btn tb-sm" @click="resEditAddCharChange">➕ 角色变更</button>
+                                        </div>
+                                    </div>
+                                    <div class="form-row form-row-2col">
+                                        <div class="form-col">
+                                            <label>获得物品</label>
+                                            <select v-model="resEditStep.gainItem">
+                                                <option value="">(无)</option>
+                                                <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-col">
+                                            <label>获得方式</label>
+                                            <select v-model="resEditStep.gainApproach" :disabled="!resEditStep.gainItem">
+                                                <option value="find">寻获</option>
+                                                <option value="receive">赠予</option>
+                                                <option value="unlock">解锁</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row form-row-2col">
+                                        <div class="form-col">
+                                            <label>设置 Flag</label>
+                                            <input type="text" v-model="resEditStep.flag" placeholder="flag 名称" />
+                                        </div>
+                                        <div class="form-col">
+                                            <label>打字速度 (ms)</label>
+                                            <input type="number" v-model="resEditStep.speed" placeholder="25" min="1" />
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <label>环境特效</label>
+                                        <div class="effects-picker">
+                                            <label v-for="ef in availableEffects" :key="ef" class="effect-check">
+                                                <input type="checkbox" :value="ef"
+                                                       :checked="(resEditStep.effects || []).includes(ef)"
+                                                       @change="resEditToggleEffect(ef)" />
+                                                {{ ef }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- === 分支选择 === -->
+                                <template v-if="resEditStep.type === 'choice'">
+                                    <div class="form-row">
+                                        <label>场景</label>
+                                        <select v-model="resEditStep.sceneId">
+                                            <option value="">(无场景)</option>
+                                            <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-row">
+                                        <label>分支提示文本</label>
+                                        <textarea v-model="resEditStep.text" rows="2" placeholder="面对眼前的抉择，你选择..."></textarea>
+                                    </div>
+                                    <div class="form-row">
+                                        <label>分支选项</label>
+                                        <div class="choices-editor">
+                                            <div v-for="(choice, ci) in (resEditStep.choices || [])" :key="ci" class="choice-item-edit">
+                                                <div class="choice-header">
+                                                    <strong>选项 #{{ ci + 1 }}</strong>
+                                                    <button class="step-btn step-btn-del" @click="resEditRemoveChoice(ci)">✕</button>
+                                                </div>
+                                                <input type="text" v-model="choice.text" placeholder="选项文本" class="choice-text" />
+                                                <div class="choice-detail-row">
+                                                    <select v-model="choice.jumpChapter" class="choice-jump">
+                                                        <option value="">跳转到...</option>
+                                                        <optgroup label="章节">
+                                                            <option v-for="(_, cid) in chapters" :key="cid" :value="cid">{{ cid }}</option>
+                                                        </optgroup>
+                                                        <optgroup label="结局">
+                                                            <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">🎬 {{ end.title }} ({{ end.id }})</option>
+                                                        </optgroup>
+                                                    </select>
+                                                    <input type="text" v-model="choice.flag" placeholder="flag" class="choice-flag" />
+                                                </div>
+                                            </div>
+                                            <button class="tb-btn tb-sm" @click="resEditAddChoice">➕ 添加选项</button>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- === 跳转类型 === -->
+                                <template v-if="resEditStep.type === 'jump'">
+                                    <div v-if="!resEditStep._jumpMode">{{ resEditSetDefaultJumpMode(resEditStep) }}</div>
+                                    <div class="form-row">
+                                        <label>跳转类型</label>
+                                        <div class="jump-mode-toggle">
+                                            <label class="toggle-option" :class="{ active: resEditStep._jumpMode === 'chapter' }">
+                                                <input type="radio" value="chapter" v-model="resEditStep._jumpMode" @change="resEditStep.endingId = ''" />
+                                                ⤵ 跳转到章节
+                                            </label>
+                                            <label class="toggle-option" :class="{ active: resEditStep._jumpMode === 'ending' }">
+                                                <input type="radio" value="ending" v-model="resEditStep._jumpMode" @change="resEditStep.jumpChapter = ''" />
+                                                🎬 触发结局
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <template v-if="resEditStep._jumpMode === 'chapter'">
+                                        <div class="form-row">
+                                            <label>目标章节</label>
+                                            <select v-model="resEditStep.jumpChapter">
+                                                <option value="">选择目标...</option>
+                                                <optgroup label="章节">
+                                                    <option v-for="(_, cid) in chapters" :key="cid" :value="cid">{{ cid }}</option>
+                                                </optgroup>
+                                                <optgroup label="结局（快捷）">
+                                                    <option v-for="end in gameEndings" :key="end.id" :value="'_end_' + end.id">🎬 {{ end.title }} ({{ end.id }})</option>
+                                                </optgroup>
+                                            </select>
+                                        </div>
+                                    </template>
+                                    <template v-if="resEditStep._jumpMode === 'ending'">
+                                        <div class="form-row">
+                                            <label>触发结局</label>
+                                            <select v-model="resEditStep.endingId">
+                                                <option value="">选择结局...</option>
+                                                <option v-for="end in gameEndings" :key="end.id" :value="end.id">🎬 {{ end.title }} ({{ end.id }})</option>
+                                            </select>
+                                            <div v-if="resEditStep.endingId" class="ending-preview" style="margin-top:6px">
+                                                <div class="ending-preview-title">{{ (gameEndings.find(e => e.id === resEditStep.endingId) || {}).title }}</div>
+                                                <div class="ending-preview-desc">{{ (gameEndings.find(e => e.id === resEditStep.endingId) || {}).description }}</div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <div class="form-row form-row-2col">
+                                        <div class="form-col">
+                                            <label>获得物品</label>
+                                            <select v-model="resEditStep.gainItem">
+                                                <option value="">(无)</option>
+                                                <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-col">
+                                            <label>获得方式</label>
+                                            <select v-model="resEditStep.gainApproach" :disabled="!resEditStep.gainItem">
+                                                <option value="find">寻获</option>
+                                                <option value="receive">赠予</option>
+                                                <option value="unlock">解锁</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <label>设置 Flag</label>
+                                        <input type="text" v-model="resEditStep.flag" placeholder="flag 名称" />
+                                    </div>
+                                </template>
+
+                                <!-- === 结局触发 === -->
+                                <template v-if="resEditStep.type === 'ending'">
+                                    <div class="form-row">
+                                        <label>触发结局</label>
+                                        <select v-model="resEditStep.endingId">
+                                            <option value="">选择结局...</option>
+                                            <option v-for="end in gameEndings" :key="end.id" :value="end.id">🎬 {{ end.title }} ({{ end.id }})</option>
+                                        </select>
+                                        <div v-if="resEditStep.endingId" class="ending-preview" style="margin-top:6px">
+                                            <div class="ending-preview-title">{{ (gameEndings.find(e => e.id === resEditStep.endingId) || {}).title }}</div>
+                                            <div class="ending-preview-desc">{{ (gameEndings.find(e => e.id === resEditStep.endingId) || {}).description }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <label>设置 Flag</label>
+                                        <input type="text" v-model="resEditStep.flag" placeholder="flag 名称" />
+                                    </div>
+                                </template>
+
+                                </div><!-- /step-editor-body -->
                             </div>
 
                             <!-- 未选择资源 -->
