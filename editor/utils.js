@@ -150,9 +150,18 @@ export function initCGForm(step) {
     }
 }
 
-/** 初始化角色变更临时属性 */
+/** 初始化角色变更临时属性（含数组→字符串转换供 UI 使用） */
 export function initCharChanges(step) {
     if (!step._charChanges) {
         step._charChanges = clone(step.characterChanges || []);
+        // 将 ids/weights 等数组字段转为逗号分隔字符串（UI 输入框使用）
+        for (const cc of step._charChanges) {
+            if (Array.isArray(cc.ids)) {
+                cc.ids = cc.ids.join(', ');
+            }
+            if (Array.isArray(cc.weights)) {
+                cc.weights = cc.weights.join(', ');
+            }
+        }
     }
 }

@@ -19,6 +19,7 @@ export { ENDINGS }      from './config/endings.js';
 
 // ---- 章节 ----
 import { chapter_body_explore }        from './chapters/body_explore.js';
+import { chapter_character_demo }      from './chapters/character_demo.js';
 import { chapter_crystal_chamber }     from './chapters/crystal_chamber.js';
 import { chapter_crystal_retrieval }   from './chapters/crystal_retrieval.js';
 import { chapter_desperate_route }     from './chapters/desperate_route.js';
@@ -63,6 +64,7 @@ export const CHAPTER_DESCRIPTIONS = {
 
 export const STORY_CHAPTERS = {
     'body_explore':          chapter_body_explore,
+    'character_demo':        chapter_character_demo,
     'crystal_chamber':       chapter_crystal_chamber,
     'crystal_retrieval':     chapter_crystal_retrieval,
     'desperate_route':       chapter_desperate_route,

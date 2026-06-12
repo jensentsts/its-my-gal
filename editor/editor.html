@@ -15,6 +15,40 @@
     <link rel="stylesheet" href="editor-styles.css">
 </head>
 <body>
+    <!-- 全局 datalist 供搜索式下拉补全使用 -->
+    <datalist id="dl-char-ids">
+        <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+    </datalist>
+    <datalist id="dl-scene-ids">
+        <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
+    </datalist>
+    <datalist id="dl-cg-ids">
+        <option v-for="(cg, cgid) in gameCgLibrary" :key="cgid" :value="cgid">{{ cg.title }}</option>
+    </datalist>
+    <datalist id="dl-item-ids">
+        <option v-for="(item, iid) in gameItems" :key="iid" :value="iid">{{ item.name }}</option>
+    </datalist>
+    <datalist id="dl-anims">
+        <option value="fade-in"><option value="fade-out">
+        <option value="slide-in-left"><option value="slide-in-right"><option value="slide-in-up"><option value="slide-in-down">
+        <option value="slide-out-left"><option value="slide-out-right"><option value="slide-out-up"><option value="slide-out-down">
+        <option value="bounce-in"><option value="bounce-out">
+        <option value="zoom-in"><option value="zoom-out">
+        <option value="flip-in"><option value="flip-out">
+        <option value="drop-in"><option value="float-in"><option value="stumble-in"><option value="swing-in">
+        <option value="shrink-out"><option value="vanish">
+        <option value="shake"><option value="flash"><option value="glow"><option value="float">
+        <option value="pulse"><option value="tremble"><option value="blur"><option value="highlight"><option value="shine"><option value="dizzy">
+        <option value="swap"><option value="slide-left"><option value="slide-right">
+        <option value="action-wave"><option value="action-bow"><option value="action-nod">
+        <option value="action-jump"><option value="action-fall"><option value="action-turn">
+    </datalist>
+    <datalist id="dl-positions">
+        <option value="center"><option value="left"><option value="right">
+        <option value="left-far"><option value="center-left">
+        <option value="center-right"><option value="right-far">
+    </datalist>
+
     <div id="editor-app" v-cloak @contextmenu.prevent="onGlobalContextMenu" @click="closeGlobalContextMenu" @mouseover="onGlobalMouseOver" @mouseout="onGlobalMouseOut">
 
         <!-- 自定义悬浮提示 -->
@@ -258,7 +292,7 @@
                         🎬 在此新建结局
                     </div>
                     <div class="context-menu-item" v-if="contextMenu.nodeId"
-                         @click="toggleEntryPoint(contextMenu.nodeId); closeContextMenu()">
+                         @click="setEntryPoint(contextMenu.nodeId); closeContextMenu()">
                         {{ isEntryPoint(contextMenu.nodeId) ? '🚫 取消入口标记' : '🚪 设为入口节点' }}
                     </div>
                     <div class="context-menu-separator" v-if="contextMenu.nodeId"></div>
@@ -361,7 +395,7 @@
                         <div class="form-row">
                             <label>场景</label>
                             <div class="locate-row">
-                                <select v-model="editingStep.sceneId">
+                                <select v-model="editingStep.sceneId" class="cc-char-sel">
                                     <option value="">(无场景)</option>
                                     <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
                                 </select>
@@ -371,7 +405,7 @@
                         <div class="form-row">
                             <label>说话人</label>
                             <div class="locate-row">
-                                <select v-model="editingStep.characterId">
+                                <select v-model="editingStep.characterId" class="cc-char-sel">
                                     <option value="">(旁白/叙述)</option>
                                     <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
                                 </select>
@@ -423,22 +457,202 @@
                         <div class="form-row">
                             <label>角色变更</label>
                             <div class="char-changes-list">
-                                <div v-for="(cc, cci) in (editingStep._charChanges || [])" :key="cci" class="char-change-row">
-                                    <select v-model="cc.id" @change="onCharChangeField">
-                                        <option value="">选择角色...</option>
-                                        <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
-                                    </select>
-                                    <select v-model="cc.action" @change="onCharChangeField">
-                                        <option value="enter">入场</option>
-                                        <option value="update">更新</option>
-                                        <option value="leave">退场</option>
-                                    </select>
-                                    <select v-if="cc.action !== 'leave'" v-model="cc.spriteId" @change="onCharChangeField">
-                                        <option value="">默认立绘</option>
-                                        <option v-for="(sp, sid) in getCharSprites(cc.id)" :key="sid" :value="sid">{{ sp.label }}</option>
-                                    </select>
-                                    <input type="text" v-model="cc.animation" placeholder="动画" class="cc-anim" @change="onCharChangeField" />
-                                    <button class="step-btn step-btn-del" @click="removeCharChange(cci)">✕</button>
+                                <div v-for="(cc, cci) in (editingStep._charChanges || [])" :key="cci" class="char-change-row" :class="'cc-action-' + cc.action">
+                                    <!-- ═══ 首行：动作 + 角色 + 核心里 ═══ -->
+                                    <div class="cc-main-row">
+                                        <select v-model="cc.action" @change="onCharChangeField" class="cc-action-sel">
+                                            <option value="enter">🎭 入场</option>
+                                            <option value="update">🔄 更新</option>
+                                            <option value="leave">👋 退场</option>
+                                            <option value="move">🚶 移动</option>
+                                            <option value="speak">💬 说话</option>
+                                            <option value="silence">🔇 沉默</option>
+                                            <option value="speakAll">🗣️ 全员说</option>
+                                            <option value="silenceAll">🤫 全沉默</option>
+                                            <option value="action">💃 动作</option>
+                                            <option value="effect">✨ 特效</option>
+                                            <option value="filter">🎨 滤镜</option>
+                                            <option value="resetFilter">🔄 清滤镜</option>
+                                            <option value="scale">🔍 缩放</option>
+                                            <option value="opacity">👻 透明度</option>
+                                            <option value="swap">🔄 交换</option>
+                                            <option value="gather">📦 聚集</option>
+                                            <option value="scatter">💥 散开</option>
+                                            <option value="order">📋 排序</option>
+                                            <option value="clearAll">🗑️ 全清</option>
+                                        </select>
+
+                                        <!-- 单角色选 -->
+                                        <select v-if="['enter','update','leave','move','speak','silence','action','effect','filter','resetFilter','scale','opacity'].includes(cc.action)"
+                                                v-model="cc.id" @change="onCharChangeField" class="cc-char-sel">
+                                            <option value="">选择角色...</option>
+                                            <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+                                        </select>
+
+                                        <!-- swap: 双角色 -->
+                                        <template v-if="cc.action === 'swap'">
+                                            <select v-model="cc.id1" @change="onCharChangeField" class="cc-char-sel">
+                                                <option value="">角色 A...</option>
+                                                <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+                                            </select>
+                                            <span class="cc-sep">↔</span>
+                                            <select v-model="cc.id2" @change="onCharChangeField" class="cc-char-sel">
+                                                <option value="">角色 B...</option>
+                                                <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+                                            </select>
+                                        </template>
+
+                                        <!-- 多角色 ids -->
+                                        <input v-if="['speakAll','gather','scatter','order'].includes(cc.action)"
+                                               v-model="cc.ids" list="dl-char-ids" placeholder="输入角色 ID，逗号分隔" class="cc-ids-input" @change="onCharChangeField">
+
+                                        <!-- 核心里 -->
+                                        <template v-if="cc.action === 'leave'">
+                                            <input v-model="cc.animation" list="dl-anims" placeholder="动画" class="cc-anim" @change="onCharChangeField">
+                                            <input v-model="cc.duration" type="number" placeholder="持续s" step="0.1" min="0.1" class="cc-xs" @change="onCharChangeField">
+                                        </template>
+                                        <template v-if="cc.action === 'silence'">
+                                            <span class="cc-static-label">让该角色停止说话</span>
+                                        </template>
+                                        <template v-if="cc.action === 'silenceAll'">
+                                            <span class="cc-static-label">停止所有角色说话</span>
+                                        </template>
+                                        <template v-if="cc.action === 'resetFilter'">
+                                            <span class="cc-static-label">重置该角色的颜色滤镜</span>
+                                        </template>
+
+                                        <button class="step-btn step-btn-del" @click="removeCharChange(cci)" title="删除">✕</button>
+                                    </div>
+
+                                    <!-- ═══ 第二行：按 action 显示专属参数 ═══ -->
+                                    <div class="cc-sub-row" v-if="cc.action !== 'silence' && cc.action !== 'silenceAll' && cc.action !== 'resetFilter'">
+                                        <!-- enter/update/gather: 立绘 -->
+                                        <template v-if="['enter','update','gather'].includes(cc.action)">
+                                            <select v-model="cc.spriteId" @change="onCharChangeField" class="cc-sprite-sel">
+                                                <option value="">默认立绘</option>
+                                                <option v-for="(sp, sid) in getCharSprites(cc.id)" :key="sid" :value="sid">{{ sp.label }}</option>
+                                            </select>
+                                        </template>
+
+                                        <!-- enter/move/gather: 位置 -->
+                                        <template v-if="['enter','move','gather'].includes(cc.action)">
+                                            <select v-model="cc.position" @change="onCharChangeField" class="cc-pos-sel">
+                                                <option value="center">居中</option>
+                                                <option value="left">左</option>
+                                                <option value="right">右</option>
+                                                <option value="left-far">最左</option>
+                                                <option value="center-left">左中</option>
+                                                <option value="center-right">右中</option>
+                                                <option value="right-far">最右</option>
+                                            </select>
+                                        </template>
+
+                                        <!-- 动画名 -->
+                                        <input v-if="['enter','update','move','speak','action','effect','gather','scatter','clearAll'].includes(cc.action)"
+                                               v-model="cc.animation" list="dl-anims" placeholder="动画名" class="cc-anim" @change="onCharChangeField">
+
+                                        <!-- 持续时间 -->
+                                        <template v-if="['action','effect','clearAll'].includes(cc.action)">
+                                            <label class="cc-label">持续:</label>
+                                            <input v-model="cc.duration" type="number" step="0.1" min="0.1" placeholder="0.5" class="cc-xs" @change="onCharChangeField">
+                                        </template>
+
+                                        <!-- action: 动作类型 -->
+                                        <template v-if="cc.action === 'action'">
+                                            <select v-model="cc.actionId" @change="onCharChangeField" class="cc-sm">
+                                                <option value="">动作…</option>
+                                                <option value="wave">挥手</option>
+                                                <option value="bow">鞠躬</option>
+                                                <option value="point">指</option>
+                                                <option value="nod">点头</option>
+                                                <option value="shake-head">摇头</option>
+                                                <option value="sit">坐下</option>
+                                                <option value="stand">站起</option>
+                                                <option value="jump">跳跃</option>
+                                                <option value="fall">跌倒</option>
+                                                <option value="turn">转身</option>
+                                                <option value="custom">自定义</option>
+                                            </select>
+                                        </template>
+
+                                        <!-- effect: 特效类型 -->
+                                        <template v-if="cc.action === 'effect'">
+                                            <select v-model="cc.effect" @change="onCharChangeField" class="cc-sm">
+                                                <option value="">特效…</option>
+                                                <option value="shake">摇晃</option>
+                                                <option value="flash">闪烁</option>
+                                                <option value="glow">发光</option>
+                                                <option value="float">浮动</option>
+                                                <option value="pulse">脉动</option>
+                                                <option value="tremble">颤抖</option>
+                                                <option value="blur">模糊</option>
+                                                <option value="highlight">高亮</option>
+                                                <option value="shine">闪耀</option>
+                                                <option value="dizzy">眩晕</option>
+                                            </select>
+                                        </template>
+
+                                        <!-- enter: 入场即说话 + 组ID -->
+                                        <template v-if="cc.action === 'enter'">
+                                            <label class="cc-label cc-check"><input type="checkbox" v-model="cc.speak" @change="onCharChangeField"> 说话</label>
+                                            <input v-model="cc.groupId" placeholder="分组" class="cc-xs" @change="onCharChangeField">
+                                        </template>
+
+                                        <!-- speak: 权重 -->
+                                        <template v-if="cc.action === 'speak'">
+                                            <label class="cc-label">音量:</label>
+                                            <input type="range" v-model.number="cc.weight" min="0" max="1" step="0.1" class="cc-range" @change="onCharChangeField">
+                                            <span class="cc-range-val">{{ cc.weight }}</span>
+                                        </template>
+
+                                        <!-- filter: 三个滑块 -->
+                                        <template v-if="cc.action === 'filter'">
+                                            <div class="cc-filters-inline">
+                                                <label class="cc-label">亮度</label>
+                                                <input type="range" v-model.number="cc.filters.brightness" min="0" max="2" step="0.05" class="cc-range" @change="onCharChangeField">
+                                                <span class="cc-range-val">{{ cc.filters.brightness?.toFixed(2) }}</span>
+                                                <label class="cc-label">饱和度</label>
+                                                <input type="range" v-model.number="cc.filters.saturation" min="0" max="2" step="0.05" class="cc-range" @change="onCharChangeField">
+                                                <span class="cc-range-val">{{ cc.filters.saturation?.toFixed(2) }}</span>
+                                                <label class="cc-label">对比度</label>
+                                                <input type="range" v-model.number="cc.filters.contrast" min="0" max="2" step="0.05" class="cc-range" @change="onCharChangeField">
+                                                <span class="cc-range-val">{{ cc.filters.contrast?.toFixed(2) }}</span>
+                                            </div>
+                                        </template>
+
+                                        <!-- scale / opacity: 滑块 -->
+                                        <template v-if="cc.action === 'scale'">
+                                            <label class="cc-label">缩放:</label>
+                                            <input type="range" v-model.number="cc.scale" min="0.1" max="3" step="0.05" class="cc-range" @change="onCharChangeField">
+                                            <span class="cc-range-val">{{ cc.scale?.toFixed(2) }}</span>
+                                        </template>
+                                        <template v-if="cc.action === 'opacity'">
+                                            <label class="cc-label">透明度:</label>
+                                            <input type="range" v-model.number="cc.opacity" min="0" max="1" step="0.05" class="cc-range" @change="onCharChangeField">
+                                            <span class="cc-range-val">{{ cc.opacity?.toFixed(2) }}</span>
+                                        </template>
+
+                                        <!-- gather: spread -->
+                                        <template v-if="cc.action === 'gather'">
+                                            <label class="cc-label">间距:</label>
+                                            <input v-model="cc.spread" type="number" step="0.01" placeholder="0.15" class="cc-xs" @change="onCharChangeField">
+                                        </template>
+
+                                        <!-- move/enter: 偏移量 -->
+                                        <template v-if="['enter','move'].includes(cc.action)">
+                                            <label class="cc-label">偏移:</label>
+                                            <input v-model="cc.offsetX" type="number" placeholder="X" class="cc-xs" @change="onCharChangeField">
+                                            <input v-model="cc.offsetY" type="number" placeholder="Y" class="cc-xs" @change="onCharChangeField">
+                                        </template>
+
+                                        <!-- gather: sprite -->
+                                        <template v-if="cc.action === 'gather'">
+                                            <select v-model="cc.spriteId" @change="onCharChangeField" class="cc-sprite-sel">
+                                                <option value="">默认立绘</option>
+                                                <option v-for="(sp, sid) in getCharSprites(cc.id)" :key="sid" :value="sid">{{ sp.label }}</option>
+                                            </select>
+                                        </template>
+                                    </div>
                                 </div>
                                 <button class="tb-btn tb-sm" @click="addCharChange">➕ 角色变更</button>
                             </div>
@@ -488,7 +702,7 @@
                     <template v-if="editingStep.type === 'choice'">
                         <div class="form-row">
                             <label>场景</label>
-                            <select v-model="editingStep.sceneId">
+                            <select v-model="editingStep.sceneId" class="cc-char-sel">
                                 <option value="">(无场景)</option>
                                 <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
                             </select>
@@ -907,8 +1121,8 @@
                         <div v-for="node in treeNodes" :key="node.id"
                              class="entry-point-item"
                              :class="{ 'entry-point-active': entryPoints[node.id] }"
-                             @click="toggleEntryPoint(node.id)">
-                            <span class="entry-point-indicator">{{ entryPoints[node.id] ? '🚪' : '○' }}</span>
+                             @click="setEntryPoint(node.id)">
+                            <span class="entry-point-indicator">{{ entryPoints[node.id] ? '🔘' : '○' }}</span>
                             <span class="entry-point-name">{{ node.label }}</span>
                             <span class="entry-point-type">{{ node.type === 'ending' ? '🎬结局' : '📜章节' }}</span>
                         </div>
@@ -1299,7 +1513,7 @@
                                     <div class="form-row">
                                         <label>场景</label>
                                         <div class="locate-row">
-                                        <select v-model="resEditStep.sceneId">
+                                        <select v-model="resEditStep.sceneId" class="cc-char-sel">
                                             <option value="">(无场景)</option>
                                             <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
                                         </select>
@@ -1309,7 +1523,7 @@
                                     <div class="form-row">
                                         <label>说话人</label>
                                         <div class="locate-row">
-                                        <select v-model="resEditStep.characterId">
+                                        <select v-model="resEditStep.characterId" class="cc-char-sel">
                                             <option value="">(旁白/叙述)</option>
                                             <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
                                         </select>
@@ -1361,22 +1575,183 @@
                                     <div class="form-row">
                                         <label>角色变更</label>
                                         <div class="char-changes-list">
-                                            <div v-for="(cc, cci) in (resEditStep._charChanges || [])" :key="cci" class="char-change-row">
-                                                <select v-model="cc.id" @change="resEditOnCharChangeField">
-                                                    <option value="">选择角色...</option>
-                                                    <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
-                                                </select>
-                                                <select v-model="cc.action" @change="resEditOnCharChangeField">
-                                                    <option value="enter">入场</option>
-                                                    <option value="update">更新</option>
-                                                    <option value="leave">退场</option>
-                                                </select>
-                                                <select v-if="cc.action !== 'leave'" v-model="cc.spriteId" @change="resEditOnCharChangeField">
-                                                    <option value="">默认立绘</option>
-                                                    <option v-for="(sp, sid) in getCharSprites(cc.id)" :key="sid" :value="sid">{{ sp.label }}</option>
-                                                </select>
-                                                <input type="text" v-model="cc.animation" placeholder="动画" class="cc-anim" @change="resEditOnCharChangeField" />
-                                                <button class="step-btn step-btn-del" @click="resEditRemoveCharChange(cci)">✕</button>
+                                            <div v-for="(cc, cci) in (resEditStep._charChanges || [])" :key="cci" class="char-change-row" :class="'cc-action-' + cc.action">
+                                                <div class="cc-main-row">
+                                                    <select v-model="cc.action" @change="resEditOnCharChangeField" class="cc-action-sel">
+                                                        <option value="enter">🎭 入场</option>
+                                                        <option value="update">🔄 更新</option>
+                                                        <option value="leave">👋 退场</option>
+                                                        <option value="move">🚶 移动</option>
+                                                        <option value="speak">💬 说话</option>
+                                                        <option value="silence">🔇 沉默</option>
+                                                        <option value="speakAll">🗣️ 全员说</option>
+                                                        <option value="silenceAll">🤫 全沉默</option>
+                                                        <option value="action">💃 动作</option>
+                                                        <option value="effect">✨ 特效</option>
+                                                        <option value="filter">🎨 滤镜</option>
+                                                        <option value="resetFilter">🔄 清滤镜</option>
+                                                        <option value="scale">🔍 缩放</option>
+                                                        <option value="opacity">👻 透明度</option>
+                                                        <option value="swap">🔄 交换</option>
+                                                        <option value="gather">📦 聚集</option>
+                                                        <option value="scatter">💥 散开</option>
+                                                        <option value="order">📋 排序</option>
+                                                        <option value="clearAll">🗑️ 全清</option>
+                                                    </select>
+
+                                                    <select v-if="['enter','update','leave','move','speak','silence','action','effect','filter','resetFilter','scale','opacity'].includes(cc.action)"
+                                                            v-model="cc.id" @change="resEditOnCharChangeField" class="cc-char-sel">
+                                                        <option value="">选择角色...</option>
+                                                        <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+                                                    </select>
+
+                                                    <template v-if="cc.action === 'swap'">
+                                                        <select v-model="cc.id1" @change="resEditOnCharChangeField" class="cc-char-sel">
+                                                            <option value="">角色 A...</option>
+                                                            <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+                                                        </select>
+                                                        <span class="cc-sep">↔</span>
+                                                        <select v-model="cc.id2" @change="resEditOnCharChangeField" class="cc-char-sel">
+                                                            <option value="">角色 B...</option>
+                                                            <option v-for="(ch, cid) in gameCharacters" :key="cid" :value="cid">{{ ch.name }}</option>
+                                                        </select>
+                                                    </template>
+
+                                                    <input v-if="['speakAll','gather','scatter','order'].includes(cc.action)"
+                                                           v-model="cc.ids" list="dl-char-ids" placeholder="输入角色 ID，逗号分隔" class="cc-ids-input" @change="resEditOnCharChangeField">
+
+                                                    <template v-if="cc.action === 'leave'">
+                                                        <input v-model="cc.animation" list="dl-anims" placeholder="动画" class="cc-anim" @change="resEditOnCharChangeField">
+                                                        <input v-model="cc.duration" type="number" placeholder="持续s" step="0.1" min="0.1" class="cc-xs" @change="resEditOnCharChangeField">
+                                                    </template>
+                                                    <template v-if="cc.action === 'silence'">
+                                                        <span class="cc-static-label">让该角色停止说话</span>
+                                                    </template>
+                                                    <template v-if="cc.action === 'silenceAll'">
+                                                        <span class="cc-static-label">停止所有角色说话</span>
+                                                    </template>
+                                                    <template v-if="cc.action === 'resetFilter'">
+                                                        <span class="cc-static-label">重置该角色的颜色滤镜</span>
+                                                    </template>
+
+                                                    <button class="step-btn step-btn-del" @click="resEditRemoveCharChange(cci)" title="删除">✕</button>
+                                                </div>
+
+                                                <div class="cc-sub-row" v-if="cc.action !== 'silence' && cc.action !== 'silenceAll' && cc.action !== 'resetFilter'">
+                                                    <template v-if="['enter','update','gather'].includes(cc.action)">
+                                                        <select v-model="cc.spriteId" @change="resEditOnCharChangeField" class="cc-sprite-sel">
+                                                            <option value="">默认立绘</option>
+                                                            <option v-for="(sp, sid) in getCharSprites(cc.id)" :key="sid" :value="sid">{{ sp.label }}</option>
+                                                        </select>
+                                                    </template>
+
+                                                    <template v-if="['enter','move','gather'].includes(cc.action)">
+                                                        <select v-model="cc.position" @change="resEditOnCharChangeField" class="cc-pos-sel">
+                                                            <option value="center">居中</option>
+                                                            <option value="left">左</option>
+                                                            <option value="right">右</option>
+                                                            <option value="left-far">最左</option>
+                                                            <option value="center-left">左中</option>
+                                                            <option value="center-right">右中</option>
+                                                            <option value="right-far">最右</option>
+                                                        </select>
+                                                    </template>
+
+                                                    <input v-if="['enter','update','move','speak','action','effect','gather','scatter','clearAll'].includes(cc.action)"
+                                                           v-model="cc.animation" list="dl-anims" placeholder="动画名" class="cc-anim" @change="resEditOnCharChangeField">
+
+                                                    <template v-if="['action','effect','clearAll'].includes(cc.action)">
+                                                        <label class="cc-label">持续:</label>
+                                                        <input v-model="cc.duration" type="number" step="0.1" min="0.1" placeholder="0.5" class="cc-xs" @change="resEditOnCharChangeField">
+                                                    </template>
+
+                                                    <template v-if="cc.action === 'action'">
+                                                        <select v-model="cc.actionId" @change="resEditOnCharChangeField" class="cc-sm">
+                                                            <option value="">动作…</option>
+                                                            <option value="wave">挥手</option>
+                                                            <option value="bow">鞠躬</option>
+                                                            <option value="point">指</option>
+                                                            <option value="nod">点头</option>
+                                                            <option value="shake-head">摇头</option>
+                                                            <option value="sit">坐下</option>
+                                                            <option value="stand">站起</option>
+                                                            <option value="jump">跳跃</option>
+                                                            <option value="fall">跌倒</option>
+                                                            <option value="turn">转身</option>
+                                                            <option value="custom">自定义</option>
+                                                        </select>
+                                                    </template>
+
+                                                    <template v-if="cc.action === 'effect'">
+                                                        <select v-model="cc.effect" @change="resEditOnCharChangeField" class="cc-sm">
+                                                            <option value="">特效…</option>
+                                                            <option value="shake">摇晃</option>
+                                                            <option value="flash">闪烁</option>
+                                                            <option value="glow">发光</option>
+                                                            <option value="float">浮动</option>
+                                                            <option value="pulse">脉动</option>
+                                                            <option value="tremble">颤抖</option>
+                                                            <option value="blur">模糊</option>
+                                                            <option value="highlight">高亮</option>
+                                                            <option value="shine">闪耀</option>
+                                                            <option value="dizzy">眩晕</option>
+                                                        </select>
+                                                    </template>
+
+                                                    <template v-if="cc.action === 'enter'">
+                                                        <label class="cc-label cc-check"><input type="checkbox" v-model="cc.speak" @change="resEditOnCharChangeField"> 说话</label>
+                                                        <input v-model="cc.groupId" placeholder="分组" class="cc-xs" @change="resEditOnCharChangeField">
+                                                    </template>
+
+                                                    <template v-if="cc.action === 'speak'">
+                                                        <label class="cc-label">音量:</label>
+                                                        <input type="range" v-model.number="cc.weight" min="0" max="1" step="0.1" class="cc-range" @change="resEditOnCharChangeField">
+                                                        <span class="cc-range-val">{{ cc.weight }}</span>
+                                                    </template>
+
+                                                    <template v-if="cc.action === 'filter'">
+                                                        <div class="cc-filters-inline">
+                                                            <label class="cc-label">亮度</label>
+                                                            <input type="range" v-model.number="cc.filters.brightness" min="0" max="2" step="0.05" class="cc-range" @change="resEditOnCharChangeField">
+                                                            <span class="cc-range-val">{{ cc.filters.brightness?.toFixed(2) }}</span>
+                                                            <label class="cc-label">饱和度</label>
+                                                            <input type="range" v-model.number="cc.filters.saturation" min="0" max="2" step="0.05" class="cc-range" @change="resEditOnCharChangeField">
+                                                            <span class="cc-range-val">{{ cc.filters.saturation?.toFixed(2) }}</span>
+                                                            <label class="cc-label">对比度</label>
+                                                            <input type="range" v-model.number="cc.filters.contrast" min="0" max="2" step="0.05" class="cc-range" @change="resEditOnCharChangeField">
+                                                            <span class="cc-range-val">{{ cc.filters.contrast?.toFixed(2) }}</span>
+                                                        </div>
+                                                    </template>
+
+                                                    <template v-if="cc.action === 'scale'">
+                                                        <label class="cc-label">缩放:</label>
+                                                        <input type="range" v-model.number="cc.scale" min="0.1" max="3" step="0.05" class="cc-range" @change="resEditOnCharChangeField">
+                                                        <span class="cc-range-val">{{ cc.scale?.toFixed(2) }}</span>
+                                                    </template>
+                                                    <template v-if="cc.action === 'opacity'">
+                                                        <label class="cc-label">透明度:</label>
+                                                        <input type="range" v-model.number="cc.opacity" min="0" max="1" step="0.05" class="cc-range" @change="resEditOnCharChangeField">
+                                                        <span class="cc-range-val">{{ cc.opacity?.toFixed(2) }}</span>
+                                                    </template>
+
+                                                    <template v-if="cc.action === 'gather'">
+                                                        <label class="cc-label">间距:</label>
+                                                        <input v-model="cc.spread" type="number" step="0.01" placeholder="0.15" class="cc-xs" @change="resEditOnCharChangeField">
+                                                    </template>
+
+                                                    <template v-if="['enter','move'].includes(cc.action)">
+                                                        <label class="cc-label">偏移:</label>
+                                                        <input v-model="cc.offsetX" type="number" placeholder="X" class="cc-xs" @change="resEditOnCharChangeField">
+                                                        <input v-model="cc.offsetY" type="number" placeholder="Y" class="cc-xs" @change="resEditOnCharChangeField">
+                                                    </template>
+
+                                                    <template v-if="cc.action === 'gather'">
+                                                        <select v-model="cc.spriteId" @change="resEditOnCharChangeField" class="cc-sprite-sel">
+                                                            <option value="">默认立绘</option>
+                                                            <option v-for="(sp, sid) in getCharSprites(cc.id)" :key="sid" :value="sid">{{ sp.label }}</option>
+                                                        </select>
+                                                    </template>
+                                                </div>
                                             </div>
                                             <button class="tb-btn tb-sm" @click="resEditAddCharChange">➕ 角色变更</button>
                                         </div>
@@ -1428,7 +1803,7 @@
                                 <template v-if="resEditStep.type === 'choice'">
                                     <div class="form-row">
                                         <label>场景</label>
-                                        <select v-model="resEditStep.sceneId">
+                                        <select v-model="resEditStep.sceneId" class="cc-char-sel">
                                             <option value="">(无场景)</option>
                                             <option v-for="(sc, sid) in gameScenes" :key="sid" :value="sid">{{ sc.title }}</option>
                                         </select>

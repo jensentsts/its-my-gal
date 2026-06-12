@@ -694,6 +694,158 @@ createApp({
             engineCtx.selectedBagItemId.value = itemId;
         }
 
+        // ================================================================
+        //  增强角色渲染辅助函数
+        // ================================================================
+
+        /** 按 z-order 排序的舞台角色列表 */
+        const sortedStageCharacters = computed(() => {
+            const chars = engineCtx.stageCharacters.value;
+            if (!chars || typeof chars !== 'object') return [];
+            return Object.values(chars)
+                .filter(Boolean)
+                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        });
+
+        /**
+         * 位置映射表：角色预设位置 → CSS left 百分比
+         * 全部使用 translateX(-50%) 统一居中锚定，避免左右锚定不一致导致的视觉偏移。
+         * 间距均匀分布（~13% gap），外层角色不溢出屏幕。
+         */
+        const POSITION_MAP = {
+            'left-far':     { left: '12%' },
+            'left':         { left: '24%' },
+            'center-left':  { left: '37%' },
+            'center':       { left: '50%' },
+            'center-right': { left: '63%' },
+            'right':        { left: '76%' },
+            'right-far':    { left: '88%' },
+        };
+
+        /** 缓存动画类名，避免重复 split */
+        const POSITION_CENTER = 'center';
+
+        /**
+         * 外层定位样式 —— 仅设置 left + translateX(-50%)，不被动画 keyframes 覆盖
+         * 动画的 transform 在内层 .character-anim-layer 上播放，互不干扰
+         */
+        function getCharacterPositionStyle(state) {
+            if (!state || !state.visible) return { display: 'none' };
+
+            const pos = POSITION_MAP[state.position] || POSITION_MAP[POSITION_CENTER];
+            let transform = 'translateX(-50%)';
+
+            // 偏移量（gather 微调）放在外层
+            if (state.offsetX || state.offsetY) {
+                transform += ` translate(${state.offsetX || 0}px, ${state.offsetY || 0}px)`;
+            }
+
+            return {
+                left: pos.left,
+                transform: transform,
+                zIndex: (state.order ?? 0) + 10,
+            };
+        }
+
+        /**
+         * 内层动画 + 视觉样式 —— filter/opacity/scale 在这里，不被定位影响
+         */
+        function getCharacterAnimStyle(state) {
+            if (!state) return {};
+
+            let filter = '';
+            if (state.filters) {
+                const f = state.filters;
+                filter = [
+                    f.brightness !== undefined ? `brightness(${f.brightness})` : '',
+                    f.saturation !== undefined ? `saturate(${f.saturation})` : '',
+                    f.contrast !== undefined ? `contrast(${f.contrast})` : '',
+                ].filter(Boolean).join(' ');
+            }
+
+            const style = {
+                filter: filter || undefined,
+                opacity: state.opacity ?? 1,
+            };
+
+            // 缩放放在内层（不影响外层定位）
+            if (state.scale && state.scale !== 1) {
+                style.transform = `scale(${state.scale})`;
+            }
+
+            return Object.keys(style).length ? style : undefined;
+        }
+
+        /**
+         * animationend 回调 —— 非循环动画播放完毕后自动清除 animation 状态。
+         *
+         * 原理：
+         * - CSS 入场/退场动画（fade-in / stumble-in 等）在完成后其 forwards transform
+         *   会持续锁定内层元素，导致后续 scale/filter 等内联样式失效，进而使角色消失。
+         * - 监听 animationend，匹配到已知瞬时动画的 keyframe 名称后，从引擎状态中
+         *   清除 animation class，让内层元素回到纯内联样式控制。
+         * - 循环动画（glow/float/pulse/dizzy 等 infinite）从不触发 animationend，安全。
+         * - 引擎中 action/effect 的 setTimeout 清理也安全（幂等）。
+         */
+        const TRANSIENT_KEYFRAMES = new Set([
+            'charFadeIn', 'charFadeOut',
+            'charSlideInLeft', 'charSlideInRight', 'charSlideInUp', 'charSlideInDown',
+            'charSlideOutLeft', 'charSlideOutRight', 'charSlideOutUp', 'charSlideOutDown',
+            'charBounceIn', 'charBounceOut',
+            'charZoomIn', 'charZoomOut',
+            'charFlipIn', 'charFlipOut',
+            'charDropIn', 'charFloatIn', 'charStumbleIn', 'charSwingIn',
+            'charShrinkOut', 'charVanish',
+            'charSwap',
+            'charSlideLeft', 'charSlideRight', 'charFlipMove',
+        ]);
+
+        function onCharacterAnimationEnd(state, event) {
+            if (!state || !event) return;
+            if (!TRANSIENT_KEYFRAMES.has(event.animationName)) return;
+
+            const eng = engineCtx.engine.value;
+            if (!eng || !eng.state) return;
+            const cur = eng.state.stageCharacters[state.id];
+            if (cur) {
+                cur.animation = '';
+                engineCtx.stageCharacters.value = { ...eng.state.stageCharacters };
+            }
+        }
+
+        /**
+         * 内层动画 CSS 类 —— 纯动画/状态类，不含定位
+         */
+        function getCharacterAnimationClasses(state) {
+            if (!state || !state.visible) return [];
+            const classes = [];
+
+            // 动画类（fade-in, shake, action-wave 等）
+            if (state.animation) classes.push(state.animation);
+            if (state.actionState) classes.push(`action-${state.actionState}`);
+
+            // 说话/沉默状态
+            if (state.isSpeaking) {
+                classes.push('character-speaking');
+                classes.push(`speech-weight-${Math.round((state.speechWeight || 1) * 10)}`);
+            } else if (currentSpeakerId.value && currentSpeakerId.value !== state.id) {
+                // 非当前说话的角色变暗
+                classes.push('inactive-mask');
+            }
+
+            // 退场中
+            if (state._leaving) classes.push('character-leaving');
+
+            // 多角色同时说话时，非说话角色变暗
+            const hasMultiSpeak = Object.values(engineCtx.stageCharacters.value || {})
+                .filter(c => c && c.isSpeaking).length > 1;
+            if (!state.isSpeaking && hasMultiSpeak && currentSpeakerId.value !== state.id) {
+                classes.push('inactive-mask');
+            }
+
+            return classes;
+        }
+
         // 辅助
         function getCharName(id)  { return resolveData('CHARACTERS')[id]?.name || id; }
         function getCharColor(id) { return resolveData('CHARACTERS')[id]?.color || '#fff'; }
@@ -1439,6 +1591,9 @@ createApp({
             homeEffectMaskClasses, effectMaskClasses,
             inspectedChar, activeInspectedSpriteLabel, getArchiveEmoji,
             inspectedItemDynamicDescription,
+            // 角色增强渲染（两层架构：定位层 + 动画层）
+            sortedStageCharacters, getCharacterPositionStyle, getCharacterAnimationClasses, getCharacterAnimStyle,
+            onCharacterAnimationEnd,
             // 数据引用（动态）
             configTitle: computed(() => resolveData('GAME_CONFIG')?.title || ''),
             homeConfig: computed(() => resolveData('HOME_CONFIG')),

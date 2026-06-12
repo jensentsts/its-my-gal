@@ -1,2 +1,5 @@
 - [Story Prediction & Preloading](story-prediction-preloading.md) — 剧情分支预判与章节预加载优化系统
 - [Dialogue Stutter & Save Fixes](dialogue-saving-stutter-fixes.md) — 对话卡顿和存档故障修复记录
+- [Character Control System](character-control-system.md) — 增强型角色控制系统：多角色、定位系统、说话指示器、动作动画、滤镜/特效 DSL
+- [Editor Character Control Sync](editor-character-control-sync.md) — 编辑器角色变更面板同步：3种→17种 action，与引擎 DSL 完全对齐
+- [Editor UI Optimization](editor-ui-optimization.md) — 编辑器 UI 优化：入口单选、角色变更行紧凑布局、ID字段搜索式输入补全

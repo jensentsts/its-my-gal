@@ -485,19 +485,44 @@
                     <div class="item-toast-close-tip">点击任意区域关闭展示，或等待自动推进队列</div>
                 </div>
 
-                <!-- 角色立绘舞台（始终显示，不受右键隐藏 UI 影响） -->
+                <!-- 角色立绘舞台（两层结构：外层定位 + 内层动画） -->
                 <div class="stage-container">
-                    <div v-for="(state, charId) in stageCharacters" :key="charId"
-                         class="stage-character" :class="[state.animation, { 'inactive-mask': currentSpeakerId !== charId }]">
-                        <img v-if="state.url" :src="state.url" @error="handleSpriteError(charId)" class="character-img">
-                        <div v-else class="fallback-placeholder" :style="{'--char-color': getCharColor(charId)}">
-                            <div class="fallback-head">
-                                <span class="fallback-emoji">{{ getCharEmoji(charId, state.spriteId) }}</span>
+                    <div v-for="state in sortedStageCharacters" :key="state.id"
+                         class="stage-character"
+                         :style="getCharacterPositionStyle(state)">
+                        <div class="character-anim-layer"
+                             :class="getCharacterAnimationClasses(state)"
+                             :style="getCharacterAnimStyle(state)"
+                             @animationend="onCharacterAnimationEnd(state, $event)">
+                            <!-- 说话指示器 -->
+                            <div class="speech-indicator" v-if="state.isSpeaking && state.visible"
+                                 :style="{'--speech-weight': state.speechWeight || 1}">
+                                <span class="speech-wave" v-for="n in 3" :key="n"></span>
                             </div>
-                            <div class="fallback-body"></div>
-                            <div class="fallback-tags">
-                                <span>{{ getCharName(charId) }}</span>
-                                <small>{{ getCharMeta(charId) }}</small>
+
+                            <!-- 角色立绘 -->
+                            <img v-if="state.url && state.visible"
+                                 :src="state.url"
+                                 @error="handleSpriteError(state.id)"
+                                 class="character-img"
+                                 :class="{ 'action-active': state.actionState }">
+                            <div v-else-if="state.visible"
+                                 class="fallback-placeholder"
+                                 :style="{'--char-color': getCharColor(state.id)}">
+                                <div class="fallback-head">
+                                    <span class="fallback-emoji">{{ getCharEmoji(state.id, state.spriteId) }}</span>
+                                </div>
+                                <div class="fallback-body"></div>
+                                <div class="fallback-tags">
+                                    <span>{{ getCharName(state.id) }}</span>
+                                    <small>{{ getCharMeta(state.id) }}</small>
+                                </div>
+                            </div>
+
+                            <!-- 角色名称标签 -->
+                            <div class="char-name-tag" v-if="Object.keys(stageCharacters).length > 1 && state.visible"
+                                 :style="{ color: getCharColor(state.id) }">
+                                {{ getCharName(state.id) }}
                             </div>
                         </div>
                     </div>

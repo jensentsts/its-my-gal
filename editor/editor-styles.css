@@ -737,8 +737,8 @@ img {
    详情面板
    ==================================================================== */
 .detail-panel {
-    width: 440px;
-    min-width: 360px;
+    width: 520px;
+    min-width: 400px;
     background: var(--bg-secondary);
     border-left: 1px solid var(--border-color);
     display: flex;
@@ -1151,10 +1151,9 @@ img {
 }
 
 .char-change-row {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-    flex-wrap: wrap;
+    /* 旧版 flex 布局由新版 cc-main-row/cc-sub-row 替代，此处只做容器 */
+    display: block;
+    position: relative;
 }
 
 .char-change-row select,
@@ -1165,11 +1164,9 @@ img {
     background: var(--bg-input);
     color: var(--text-primary);
     font-size: 12px;
-    flex: 1;
-    min-width: 70px;
 }
 
-.cc-anim { max-width: 80px; }
+.cc-anim { width: 90px !important; padding: 3px 4px !important; font-size: 11px !important; }
 
 /* 环境特效 */
 .effects-picker {
@@ -1628,7 +1625,7 @@ img {
 
 /* 资源管理器步骤编辑面板 */
 .resource-step-editor {
-    width: 380px;
+    width: 480px;
     border-left: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
@@ -2214,4 +2211,294 @@ img {
     display: flex;
     gap: 6px;
     margin-top: 4px;
+}
+
+/* ====================================================================
+   增强角色变更编辑器样式
+   ==================================================================== */
+
+/* 行容器 */
+.cc-line {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+/* 动作选择器 */
+.cc-action-sel {
+    font-size: 12px;
+    padding: 3px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    cursor: pointer;
+    min-width: 120px;
+    flex: 1;
+}
+
+/* 分隔符 */
+.cc-sep {
+    color: var(--accent-green-bright);
+    font-size: 16px;
+    padding: 0 2px;
+    flex-shrink: 0;
+}
+
+/* 提示文本 */
+.cc-hint {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 60px;
+}
+
+/* 数字/小输入框 */
+.cc-num {
+    width: 60px !important;
+    padding: 3px 4px !important;
+    font-size: 11px !important;
+    text-align: center;
+}
+
+/* 范围滑块行 */
+.cc-range {
+    width: 60px !important;
+    height: 4px;
+    padding: 0 !important;
+    margin: 0 2px;
+    accent-color: var(--accent-green);
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.cc-range-val {
+    font-size: 10px;
+    color: var(--accent-green-bright);
+    font-family: var(--font-mono);
+    min-width: 28px;
+    text-align: right;
+}
+
+/* 行内标签 */
+.cc-label {
+    font-size: 11px !important;
+    color: var(--text-secondary) !important;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+}
+
+/* 带复选框的标签 */
+.cc-check input[type="checkbox"] {
+    margin: 0;
+    accent-color: var(--accent-green);
+}
+
+/* 多角色ID输入 */
+.cc-ids-input {
+    flex: 1;
+    min-width: 120px;
+    padding: 3px 6px !important;
+    font-size: 11px !important;
+    font-family: var(--font-mono) !important;
+}
+
+/* 滤镜行（多滑块紧凑排列） */
+.cc-filters {
+    gap: 2px;
+    background: rgba(0,0,0,0.15);
+    border-radius: var(--radius-sm);
+    padding: 4px 6px;
+}
+
+/* 角色变更行整体 */
+.char-change-row {
+    background: rgba(0,0,0,0.1);
+    border-radius: var(--radius-sm);
+    padding: 6px;
+    border: 1px solid var(--border-color);
+    gap: 4px;
+}
+
+/* 按 action 类型给边框染色 */
+.char-change-row.cc-action-enter    { border-left: 3px solid #4a8a4a; }
+.char-change-row.cc-action-leave    { border-left: 3px solid #c05050; }
+.char-change-row.cc-action-update   { border-left: 3px solid #4a6a8a; }
+.char-change-row.cc-action-move     { border-left: 3px solid #b0a040; }
+.char-change-row.cc-action-speak,
+.char-change-row.cc-action-speakAll,
+.char-change-row.cc-action-silence,
+.char-change-row.cc-action-silenceAll { border-left: 3px solid #5a8aaa; }
+.char-change-row.cc-action-action   { border-left: 3px solid #8a6a4a; }
+.char-change-row.cc-action-effect   { border-left: 3px solid #8a5a9a; }
+.char-change-row.cc-action-filter,
+.char-change-row.cc-action-resetFilter { border-left: 3px solid #5a7a5a; }
+.char-change-row.cc-action-scale,
+.char-change-row.cc-action-opacity  { border-left: 3px solid #6a7a8a; }
+.char-change-row.cc-action-swap     { border-left: 3px solid #c0a050; }
+.char-change-row.cc-action-gather   { border-left: 3px solid #4a8a6a; }
+.char-change-row.cc-action-scatter  { border-left: 3px solid #8a4a4a; }
+.char-change-row.cc-action-order    { border-left: 3px solid #5a5a8a; }
+.char-change-row.cc-action-clearAll { border-left: 3px solid #ff6060; }
+
+/* 新特性角标 */
+.hint-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--accent-green);
+    color: #fff;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+/* 步骤编辑器内行宽调整 */
+.char-changes-list .cc-line select,
+.char-changes-list .cc-line input[type="text"],
+.char-changes-list .cc-line input[type="number"] {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.char-changes-list .cc-line select:not(.cc-action-sel) {
+    max-width: 100px;
+}
+
+/* 滤镜输入框缩小 */
+.cc-filters input[type="range"] {
+    height: 3px;
+}
+
+/* 角色变更行删除按钮对齐 */
+.char-change-row > .cc-line:first-child {
+    margin-bottom: 2px;
+}
+
+/* ====================================================================
+   紧凑角色变更编辑器 (v2)
+   ==================================================================== */
+
+/* 首行：动作 + 角色 + 核心参数 */
+.cc-main-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+/* 第二行：按 action 的专属参数 */
+.cc-sub-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    width: 100%;
+    margin-top: 3px;
+    padding-top: 3px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+/* 紧凑尺寸 */
+.cc-sm { width: 90px !important; padding: 4px 6px !important; font-size: 12px !important; }
+.cc-xs { width: 60px !important; padding: 4px 6px !important; font-size: 12px !important; text-align: center; }
+
+/* 动画输入框 */
+.cc-anim { width: 110px !important; padding: 4px 6px !important; font-size: 12px !important; }
+
+/* 静态说明文字（silence / silenceAll / resetFilter） */
+.cc-static-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-style: italic;
+    padding: 0 6px;
+    flex: 1;
+}
+
+/* 滤镜内联行 */
+.cc-filters-inline {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-wrap: nowrap;
+    background: rgba(0,0,0,0.12);
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
+    flex: 1;
+}
+.cc-filters-inline .cc-range {
+    width: 48px !important;
+    height: 3px;
+}
+.cc-filters-inline .cc-label {
+    font-size: 10px !important;
+}
+
+/* 角色变更行间距 */
+.char-change-row {
+    padding: 8px 10px;
+    gap: 6px;
+}
+
+/* 角色变更列表间距 */
+.char-changes-list {
+    gap: 6px;
+}
+
+/* 角色选择下拉框（宽大） */
+.cc-char-sel {
+    min-width: 110px;
+    padding: 4px 8px !important;
+    font-size: 13px !important;
+}
+
+/* 位置选择下拉框 */
+.cc-pos-sel {
+    min-width: 85px;
+    padding: 4px 6px !important;
+    font-size: 12px !important;
+}
+
+/* 动作选择器加宽 */
+.cc-action-sel {
+    min-width: 100px;
+    font-size: 13px;
+}
+
+/* 删除按钮 */
+.char-change-row .step-btn-del {
+    font-size: 12px;
+    padding: 2px 8px;
+    line-height: 1.6;
+    flex-shrink: 0;
+}
+
+/* 立绘选择器加宽 */
+.cc-sprite-sel {
+    min-width: 90px;
+    padding: 4px 6px !important;
+    font-size: 12px !important;
+}
+
+/* 多角色 ID 输入框加宽 */
+.cc-ids-input {
+    flex: 1 1 140px;
+    min-width: 100px;
+    padding: 4px 8px !important;
+    font-size: 12px !important;
+}
+
+/* 自适应：窄屏时子行参数自动换行 */
+@media (max-width: 600px) {
+    .cc-sub-row { flex-direction: column; align-items: stretch; }
+    .cc-filters-inline { flex-wrap: wrap; }
 }

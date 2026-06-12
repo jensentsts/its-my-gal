@@ -184,6 +184,8 @@ export class GalEngine extends EventEmitter {
             }
             this.state.truncateHistoryLogs(this.state.historyLogs.length - 1);
             const fromChapter = this.state.currentChapterId;
+            // ★ 章节切换 → 清理舞台角色，避免旧角色残留和新角色重复入场动画
+            this._clearStageForChapterChange();
             this.state.setChapter(step.jumpChapter, 0);
             this.state.setLastSpeaker(null);
             this.emit('chapter:change', { from: fromChapter, to: step.jumpChapter, stepIndex: 0 });
@@ -228,6 +230,8 @@ export class GalEngine extends EventEmitter {
                 return;
             }
             const fromCh = this.state.currentChapterId;
+            // ★ 章节切换 → 清理舞台角色，避免旧角色残留
+            this._clearStageForChapterChange();
             this.state.setChapter(choice.jumpChapter, 0);
             this.state.setLastSpeaker(null);
             this.emit('chapter:change', { from: fromCh, to: choice.jumpChapter, stepIndex: 0 });
@@ -313,6 +317,8 @@ export class GalEngine extends EventEmitter {
                 if (step.jumpChapter) {
                     this.state.truncateHistoryLogs(this.state.historyLogs.length - 1);
                     const fromCh = this.state.currentChapterId;
+                    // ★ 章节切换 → 清理舞台角色，避免旧角色残留
+                    this._clearStageForChapterChange();
                     this.state.setChapter(step.jumpChapter, 0);
                     this.state.setLastSpeaker(null);
                     this.emit('chapter:change', { from: fromCh, to: step.jumpChapter, stepIndex: 0 });
@@ -456,6 +462,11 @@ export class GalEngine extends EventEmitter {
         if (!targetLog || !targetLog.snap) return false;
 
         this._clearTimers();
+        // 清理滞留的退场定时器
+        if (this._stageLeaveTimers) {
+            this._stageLeaveTimers.forEach(t => clearTimeout(t));
+            this._stageLeaveTimers = [];
+        }
         this.state.truncateHistoryLogs(logIndex);
         this.state.restore(targetLog.snap);
         this.state.setChapter(targetLog.chapterId, targetLog.stepIndex);
@@ -562,6 +573,11 @@ export class GalEngine extends EventEmitter {
 
             this._clearTimers();
             const prevChapter = this.state.currentChapterId;
+            // 清理滞留的退场定时器（restore 会覆盖角色数据）
+            if (this._stageLeaveTimers) {
+                this._stageLeaveTimers.forEach(t => clearTimeout(t));
+                this._stageLeaveTimers = [];
+            }
             this.state.restore(data);
             this.emit('chapter:change', {
                 from: prevChapter,
@@ -704,25 +720,533 @@ export class GalEngine extends EventEmitter {
         }
     }
 
-    _processCharacterChanges(changes) {
-        if (!Array.isArray(changes)) {
-            console.warn('[GalEngine] characterChanges 不是数组，已跳过');
-            return;
+    // ====================================================================
+    //  增强角色控制 DSL —— 位置常量
+    // ====================================================================
+
+    /** 预设位置映射表，用于 gather/scatter 等批操作 */
+    static POSITIONS = [
+        'left-far', 'left', 'center-left',
+        'center',
+        'center-right', 'right', 'right-far'
+    ];
+
+    /**
+     * 动画名称标准化映射（兼容旧格式）
+     */
+    _normalizeAnimation(anim) {
+        if (!anim) return '';
+        const map = {
+            'fadeIn': 'fade-in',
+            'fadeOut': 'fade-out',
+            'fadein': 'fade-in',
+            'fadeout': 'fade-out',
+            'slideIn': 'slide-in-up',
+            'slideOut': 'slide-out-up',
+            'slidein': 'slide-in-up',
+            'slideout': 'slide-out-up',
+            'bounce': 'bounce-in',
+            'zoomIn': 'zoom-in',
+            'zoomOut': 'zoom-out',
+            'shake': 'shake',
+            'pulse': 'pulse',
+            'float': 'float',
+            'flash': 'flash',
+            'glow': 'glow',
+            'blur': 'blur',
+            'flip': 'flip-in',
+            'flipIn': 'flip-in',
+            'flipOut': 'flip-out',
+            // 旧式 slide-left/right 保持兼容
+            'slide-left': 'slide-left',
+            'slide-right': 'slide-right',
+        };
+        return map[anim] || anim;
+    }
+
+    /**
+     * 获取下一个可用的 z-order 值（新角色排在最后）
+     */
+    _getNextOrder() {
+        const chars = this.state.stageCharacters;
+        let max = 0;
+        for (const c of Object.values(chars)) {
+            if (c && typeof c.order === 'number' && c.order > max) max = c.order;
         }
-        changes.forEach(ch => {
+        return max + 1;
+    }
+
+    /**
+     * 说话角色的 order 解析 —— 说话者自动提升到最上层，
+     * 同时记录原始 order 以便恢复。
+     *
+     * @param {string} charId
+     * @param {boolean} isSpeaking
+     * @returns {number} 新的 order 值
+     */
+    _resolveSpeakingOrder(charId, isSpeaking) {
+        const existing = this.state.stageCharacters[charId];
+        if (!existing) return this._getNextOrder();
+
+        if (isSpeaking) {
+            // 首次说话时记录原始 order
+            if (existing._originalOrder === undefined) {
+                existing._originalOrder = existing.order;
+            }
+            // 说话角色提升到最高层（当前最大 order + 1）
+            return this._getNextOrder();
+        }
+        // 恢复原始 order
+        return existing._originalOrder ?? existing.order;
+    }
+
+    /**
+     * 增强型角色变更处理器 —— 完整的 DSL 支持。
+     *
+     * 支持的 action 类型：
+     *   enter / leave / update / move / speak / silence / speakAll
+     *   action / effect / filter / resetFilter / scale / opacity
+     *   swap / gather / scatter / order / clearAll / batch
+     *
+     * @param {Array|Object} changes - 单个变更或变更数组
+     */
+    _processCharacterChanges(changes) {
+        if (!changes) return;
+
+        // 允许单条变更（非数组）
+        const list = Array.isArray(changes) ? changes : [changes];
+
+        list.forEach(ch => {
             if (!ch || typeof ch !== 'object') return;
-            if (ch.action === 'enter' || ch.action === 'update') {
-                const url = this._resolveSpriteUrl(ch.id, ch.spriteId);
-                this.state.setStageCharacter(ch.id, {
-                    id: ch.id,
-                    spriteId: ch.spriteId || 'idle',
-                    url,
-                    animation: ch.animation || ''
-                });
-            } else if (ch.action === 'leave') {
-                this.state.removeStageCharacter(ch.id);
+            try {
+                this._applyCharacterChange(ch);
+            } catch (e) {
+                console.warn(`[GalEngine] 角色变更 "${ch.action}" 执行失败:`, e.message);
             }
         });
+    }
+
+    /**
+     * 执行单条角色变更指令
+     */
+    _applyCharacterChange(ch) {
+        switch (ch.action) {
+
+            // ── 入场 ──
+            case 'enter': {
+                const existing = this.state.stageCharacters[ch.id];
+                const url = this._resolveSpriteUrl(ch.id, ch.spriteId);
+
+                // ★ 优化：角色已在舞台上 → 不做入场动画，只更新属性（静默过渡）
+                // 避免章节切换或重复指令导致角色"闪入"
+                if (existing && existing.visible !== false) {
+                    const oldPos = existing.position;
+                    const newPos = ch.position || 'center';
+                    // 位置变了 → 用移动动画而非入场动画
+                    const moveAnim = (oldPos !== newPos)
+                        ? this._normalizeAnimation(ch.animation || 'slide-' + this._getDirection(newPos, oldPos))
+                        : '';
+                    this.state.setStageCharacter(ch.id, {
+                        ...existing,
+                        spriteId: ch.spriteId || existing.spriteId,
+                        url: url || existing.url,
+                        position: newPos,
+                        isSpeaking: ch.speak !== undefined ? !!ch.speak : existing.isSpeaking,
+                        speechWeight: ch.speak ? (ch.weight ?? 1) : existing.speechWeight,
+                        scale: ch.scale ?? existing.scale ?? 1,
+                        opacity: ch.opacity ?? existing.opacity ?? 1,
+                        visible: true,
+                        animation: moveAnim,
+                        groupId: ch.groupId ?? existing.groupId,
+                        filters: ch.filters !== undefined ? { ...(existing.filters || {}), ...ch.filters } : existing.filters,
+                        offsetX: ch.offsetX ?? existing.offsetX ?? 0,
+                        offsetY: ch.offsetY ?? existing.offsetY ?? 0,
+                        _leaving: false,
+                        // 说话角色自动提升 z-order
+                        order: this._resolveSpeakingOrder(ch.id, ch.speak !== undefined ? !!ch.speak : false),
+                    });
+                } else {
+                    // ★ 真正的首次入场 → 播放入场动画
+                    this.state.setStageCharacter(ch.id, {
+                        id: ch.id,
+                        spriteId: ch.spriteId || 'idle',
+                        url,
+                        position: ch.position || 'center',
+                        order: ch.order ?? this._getNextOrder(),
+                        isSpeaking: ch.speak !== undefined ? !!ch.speak : false,
+                        speechWeight: ch.speak ? (ch.weight ?? 1) : 0,
+                        scale: ch.scale ?? 1,
+                        opacity: ch.opacity ?? 1,
+                        visible: true,
+                        animation: this._normalizeAnimation(ch.animation || 'fade-in'),
+                        animationDuration: ch.duration ?? 0.6,
+                        groupId: ch.groupId || null,
+                        filters: ch.filters || undefined,
+                        offsetX: ch.offsetX || 0,
+                        offsetY: ch.offsetY || 0,
+                        actionState: null,
+                        _leaving: false,
+                    });
+                }
+
+                // 入场音效事件（首次入场才触发）
+                if (!existing && ch.sfx) {
+                    this.emit('character:sfx', { id: ch.id, sfx: ch.sfx, type: 'enter' });
+                }
+                break;
+            }
+
+            // ── 退场 ──
+            case 'leave': {
+                const existing = this.state.stageCharacters[ch.id];
+                if (existing) {
+                    // 先设置退场动画，让 UI 播放动画后再删除
+                    this.state.setStageCharacter(ch.id, {
+                        ...existing,
+                        animation: this._normalizeAnimation(ch.animation || 'fade-out'),
+                        visible: false,
+                        _leaving: true,
+                    });
+                    const durationMs = (ch.duration ?? 0.5) * 1000;
+                    const timer = setTimeout(() => {
+                        this.state.removeStageCharacter(ch.id);
+                        this.emit('characters:change', this.state.stageCharacters);
+                        // 从定时器列表中移除
+                        if (this._stageLeaveTimers) {
+                            this._stageLeaveTimers = this._stageLeaveTimers.filter(t => t !== timer);
+                        }
+                    }, durationMs);
+                    // 跟踪定时器以便章节切换时清理
+                    if (!this._stageLeaveTimers) this._stageLeaveTimers = [];
+                    this._stageLeaveTimers.push(timer);
+                }
+                break;
+            }
+
+            // ── 更新精灵/表情 ──
+            case 'update': {
+                const existing = this.state.stageCharacters[ch.id];
+                if (existing) {
+                    const url = ch.spriteId ? this._resolveSpriteUrl(ch.id, ch.spriteId) : existing.url;
+                    this.state.setStageCharacter(ch.id, {
+                        ...existing,
+                        spriteId: ch.spriteId || existing.spriteId,
+                        url: url || existing.url,
+                        animation: this._normalizeAnimation(ch.animation || existing.animation || ''),
+                    });
+                }
+                break;
+            }
+
+            // ── 移动位置 ──
+            case 'move': {
+                const existing = this.state.stageCharacters[ch.id];
+                if (existing) {
+                    this.state.setStageCharacter(ch.id, {
+                        ...existing,
+                        position: ch.position || existing.position,
+                        animation: this._normalizeAnimation(ch.animation || 'slide-' + this._getDirection(ch.position, existing.position)),
+                        offsetX: ch.offsetX ?? existing.offsetX,
+                        offsetY: ch.offsetY ?? existing.offsetY,
+                    });
+                }
+                break;
+            }
+
+            // ── 说话状态 ──
+            case 'speak': {
+                this.state.setSpeaking(ch.id, true, ch.weight ?? 1);
+                const existing = this.state.stageCharacters[ch.id];
+                if (existing) {
+                    const patch = { isSpeaking: true, speechWeight: ch.weight ?? 1 };
+                    // ★ 说话角色自动提升到最上层
+                    patch.order = this._resolveSpeakingOrder(ch.id, true);
+                    if (ch.animation) patch.animation = this._normalizeAnimation(ch.animation);
+                    this.state.setStageCharacter(ch.id, { ...existing, ...patch });
+                }
+                break;
+            }
+
+            // ── 沉默 ──
+            case 'silence': {
+                this.state.setSpeaking(ch.id, false, 0);
+                const existing = this.state.stageCharacters[ch.id];
+                if (existing) {
+                    // ★ 停止说话后恢复普通 z-order
+                    this.state.setStageCharacter(ch.id, {
+                        ...existing,
+                        isSpeaking: false,
+                        speechWeight: 0,
+                        order: existing._originalOrder ?? existing.order,
+                    });
+                }
+                break;
+            }
+
+            // ── 全员沉默 ──
+            case 'silenceAll': {
+                this.state.silenceAll();
+                // 恢复所有角色的普通 z-order
+                for (const [id, data] of Object.entries(this.state.stageCharacters)) {
+                    if (data.isSpeaking === false && data._originalOrder !== undefined) {
+                        this.state.setStageCharacter(id, { ...data, order: data._originalOrder });
+                    }
+                }
+                break;
+            }
+
+            // ── 多角色同时说话 ──
+            case 'speakAll': {
+                if (!Array.isArray(ch.ids)) break;
+                ch.ids.forEach((id, i) => {
+                    const weight = (ch.weights && ch.weights[i]) ?? 1;
+                    this.state.setSpeaking(id, true, weight);
+                    const existing = this.state.stageCharacters[id];
+                    if (existing) {
+                        this.state.setStageCharacter(id, {
+                            ...existing,
+                            isSpeaking: true,
+                            speechWeight: weight,
+                            order: this._resolveSpeakingOrder(id, true),
+                        });
+                    }
+                });
+                break;
+            }
+
+            // ── 角色动作（动画） ──
+            case 'action': {
+                const existing = this.state.stageCharacters[ch.id];
+                if (existing) {
+                    this.state.setStageCharacter(ch.id, {
+                        ...existing,
+                        actionState: ch.actionId || null,
+                        animation: ch.actionId ? `action-${ch.actionId}` : '',
+                    });
+                    // 动作结束后自动清除状态
+                    const dur = (ch.duration ?? 1.0) * 1000;
+                    setTimeout(() => {
+                        const cur = this.state.stageCharacters[ch.id];
+                        if (cur && cur.actionState === (ch.actionId || null)) {
+                            this.state.setStageCharacter(ch.id, { ...cur, actionState: null, animation: '' });
+                            this.emit('characters:change', this.state.stageCharacters);
+                        }
+                    }, dur);
+                }
+                break;
+            }
+
+            // ── 视觉特效 ──
+            case 'effect': {
+                const existing = this.state.stageCharacters[ch.id];
+                if (existing) {
+                    this.state.setStageCharacter(ch.id, {
+                        ...existing,
+                        animation: this._normalizeAnimation(ch.effect || 'shake'),
+                    });
+                    // 特效结束后清除动画状态
+                    const dur = (ch.duration ?? 0.5) * 1000;
+                    setTimeout(() => {
+                        const cur = this.state.stageCharacters[ch.id];
+                        if (cur && cur.animation === this._normalizeAnimation(ch.effect || 'shake')) {
+                            this.state.setStageCharacter(ch.id, { ...cur, animation: '' });
+                            this.emit('characters:change', this.state.stageCharacters);
+                        }
+                    }, dur);
+                }
+                break;
+            }
+
+            // ── 颜色滤镜（亮度、饱和度、对比度） ──
+            case 'filter': {
+                const existing = this.state.stageCharacters[ch.id];
+                if (existing) {
+                    const base = existing.filters || { brightness: 1, saturation: 1, contrast: 1 };
+                    this.state.setStageCharacter(ch.id, {
+                        ...existing,
+                        filters: { ...base, ...ch.filters },
+                    });
+                }
+                break;
+            }
+
+            // ── 重置滤镜 ──
+            case 'resetFilter': {
+                const existing = this.state.stageCharacters[ch.id];
+                if (existing) {
+                    this.state.setStageCharacter(ch.id, {
+                        ...existing,
+                        filters: undefined,
+                    });
+                }
+                break;
+            }
+
+            // ── 缩放 ──
+            case 'scale': {
+                const existing = this.state.stageCharacters[ch.id];
+                if (existing) {
+                    this.state.setStageCharacter(ch.id, {
+                        ...existing,
+                        scale: ch.scale ?? 1,
+                        animation: this._normalizeAnimation(ch.animation || ''),
+                    });
+                }
+                break;
+            }
+
+            // ── 透明度 ──
+            case 'opacity': {
+                const existing = this.state.stageCharacters[ch.id];
+                if (existing) {
+                    this.state.setStageCharacter(ch.id, {
+                        ...existing,
+                        opacity: ch.opacity ?? 1,
+                        animation: this._normalizeAnimation(ch.animation || ''),
+                    });
+                }
+                break;
+            }
+
+            // ── 位置交换 ──
+            case 'swap': {
+                this.state.swapStageCharacters(ch.id1, ch.id2);
+                // 两个角色都获得交换动画
+                if (ch.id1) {
+                    const c1 = this.state.stageCharacters[ch.id1];
+                    if (c1) this.state.setStageCharacter(ch.id1, { ...c1, animation: 'swap' });
+                }
+                if (ch.id2) {
+                    const c2 = this.state.stageCharacters[ch.id2];
+                    if (c2) this.state.setStageCharacter(ch.id2, { ...c2, animation: 'swap' });
+                }
+                break;
+            }
+
+            // ── 聚集（多个角色聚集到同一位置区域） ──
+            case 'gather': {
+                if (!Array.isArray(ch.ids)) break;
+                const basePos = ch.position || 'center';
+                const spread = ch.spread ?? 0.15;
+                const total = ch.ids.length;
+                ch.ids.forEach((id, i) => {
+                    const offset = (i - (total - 1) / 2) * spread;
+                    const existing = this.state.stageCharacters[id];
+                    if (existing) {
+                        this.state.setStageCharacter(id, {
+                            ...existing,
+                            position: basePos,
+                            offsetX: offset * 100, // 转换为百分比偏移
+                            animation: this._normalizeAnimation(ch.animation || 'slide-in-up'),
+                        });
+                    } else {
+                        // 角色不在舞台上则自动入场
+                        const url = this._resolveSpriteUrl(id, ch.spriteId || 'idle');
+                        this.state.setStageCharacter(id, {
+                            id,
+                            spriteId: ch.spriteId || 'idle',
+                            url,
+                            position: basePos,
+                            order: i,
+                            offsetX: offset * 100,
+                            animation: this._normalizeAnimation(ch.animation || 'slide-in-up'),
+                            scale: ch.scale ?? 1,
+                            opacity: ch.opacity ?? 1,
+                            visible: true,
+                        });
+                    }
+                });
+                break;
+            }
+
+            // ── 散开（将聚集的角色分散到预设位置） ──
+            case 'scatter': {
+                if (!Array.isArray(ch.ids)) break;
+                const presets = GalEngine.POSITIONS;
+                const startIdx = Math.floor((presets.length - ch.ids.length) / 2);
+                ch.ids.forEach((id, i) => {
+                    const existing = this.state.stageCharacters[id];
+                    if (existing) {
+                        const pos = presets[startIdx + i] || presets[presets.length - 1];
+                        this.state.setStageCharacter(id, {
+                            ...existing,
+                            position: pos,
+                            offsetX: 0,
+                            offsetY: 0,
+                            animation: this._normalizeAnimation(ch.animation || 'slide-out-right'),
+                        });
+                    }
+                });
+                break;
+            }
+
+            // ── Z 轴顺序 ──
+            case 'order': {
+                if (!Array.isArray(ch.ids)) break;
+                ch.ids.forEach((id, i) => {
+                    const existing = this.state.stageCharacters[id];
+                    if (existing) {
+                        this.state.setStageCharacter(id, { ...existing, order: i });
+                    }
+                });
+                break;
+            }
+
+            // ── 清空舞台 ──
+            case 'clearAll': {
+                const anim = this._normalizeAnimation(ch.animation || 'fade-out');
+                const ids = Object.keys(this.state.stageCharacters);
+                if (ids.length === 0) break;
+
+                ids.forEach(id => {
+                    const existing = this.state.stageCharacters[id];
+                    if (existing) {
+                        this.state.setStageCharacter(id, {
+                            ...existing,
+                            animation: anim,
+                            visible: false,
+                            _leaving: true,
+                        });
+                    }
+                });
+
+                // 延迟删除
+                const durationMs = (ch.duration ?? 0.5) * 1000;
+                const timer = setTimeout(() => {
+                    this.state.clearStageCharacters();
+                    this.emit('characters:change', this.state.stageCharacters);
+                    if (this._stageLeaveTimers) {
+                        this._stageLeaveTimers = this._stageLeaveTimers.filter(t => t !== timer);
+                    }
+                }, durationMs);
+                if (!this._stageLeaveTimers) this._stageLeaveTimers = [];
+                this._stageLeaveTimers.push(timer);
+                break;
+            }
+
+            // ── 批量执行（嵌套子变更） ──
+            case 'batch': {
+                if (Array.isArray(ch.changes)) {
+                    this._processCharacterChanges(ch.changes);
+                }
+                break;
+            }
+
+            default:
+                console.warn(`[GalEngine] 未知的角色变更 action: ${ch.action}`);
+        }
+    }
+
+    /**
+     * 计算两点之间的移动方向（用于 move animation 自动推导）
+     */
+    _getDirection(to, from) {
+        if (!to || !from) return 'fade';
+        const order = ['left-far', 'left', 'center-left', 'center', 'center-right', 'right', 'right-far'];
+        const toIdx = order.indexOf(to);
+        const fromIdx = order.indexOf(from);
+        if (toIdx === -1 || fromIdx === -1) return 'fade';
+        return toIdx > fromIdx ? 'right' : 'left';
     }
 
     // ====================================================================
@@ -741,6 +1265,26 @@ export class GalEngine extends EventEmitter {
             title: '— 未完待续 —',
             description: '故事尚未结束，但这趟旅程已在此告一段落。\n新的篇章将在不久后展开。\n\n感谢你一路陪伴。'
         });
+    }
+
+    // ====================================================================
+    //  章节切换时的舞台清理
+    // ====================================================================
+
+    /**
+     * 章节切换时清理舞台角色：
+     *  - 清除所有 _leaving 定时器残留
+     *  - 立即清空 stageCharacters（无动画）
+     *  - 新章节由各自的 characterChanges 重新建场
+     */
+    _clearStageForChapterChange() {
+        // 终止所有 _leaving 延迟操作
+        if (this._stageLeaveTimers) {
+            this._stageLeaveTimers.forEach(t => clearTimeout(t));
+            this._stageLeaveTimers = [];
+        }
+        this.state.clearStageCharacters();
+        this.emit('characters:change', {});
     }
 
     // ====================================================================

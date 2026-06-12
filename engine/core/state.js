@@ -94,6 +94,61 @@ export class GameState {
         delete this._state.stageCharacters[charId];
     }
 
+    /**
+     * 批量更新舞台角色（新系统：合并式更新，保留未指定字段）
+     * @param {string} charId
+     * @param {Object} patch - 要更新的字段
+     */
+    patchStageCharacter(charId, patch) {
+        const existing = this._state.stageCharacters[charId];
+        if (existing) {
+            this._state.stageCharacters[charId] = { ...existing, ...patch };
+        } else {
+            this._state.stageCharacters[charId] = patch;
+        }
+    }
+
+    /**
+     * 清空舞台所有角色（支持动画过渡）
+     */
+    clearStageCharacters() {
+        this._state.stageCharacters = {};
+    }
+
+    /**
+     * 交换两个角色的位置
+     */
+    swapStageCharacters(id1, id2) {
+        const c1 = this._state.stageCharacters[id1];
+        const c2 = this._state.stageCharacters[id2];
+        if (c1 && c2) {
+            const pos1 = c1.position;
+            this._state.stageCharacters[id1] = { ...c1, position: c2.position };
+            this._state.stageCharacters[id2] = { ...c2, position: pos1 };
+        }
+    }
+
+    /**
+     * 设置说话状态
+     */
+    setSpeaking(charId, isSpeaking, weight = 0) {
+        const existing = this._state.stageCharacters[charId];
+        if (existing) {
+            this._state.stageCharacters[charId] = { ...existing, isSpeaking, speechWeight: weight };
+        }
+    }
+
+    /**
+     * 停止所有角色的说话状态
+     */
+    silenceAll() {
+        for (const [charId, charData] of Object.entries(this._state.stageCharacters)) {
+            if (charData.isSpeaking) {
+                this._state.stageCharacters[charId] = { ...charData, isSpeaking: false, speechWeight: 0 };
+            }
+        }
+    }
+
     pushHistoryLog(log) {
         this._state.historyLogs.push(log);
     }
@@ -169,8 +224,8 @@ export class GameState {
             safeIntermediate = {
                 currentChapterId:      state.currentChapterId,
                 currentStepIndex:      state.currentStepIndex,
-                gameState:             state.gameState,             // 浅引用，JSON.stringify 内部展开
-                stageCharacters:       state.stageCharacters,
+                gameState:             state.gameState,
+                stageCharacters:       this._sanitizeStageCharacters(state.stageCharacters),
                 lastSpeakerId:         state.lastSpeakerId,
                 activeCG:              state.activeCG,
                 activeEffects:         state.activeEffects,
@@ -178,7 +233,6 @@ export class GameState {
                 pendingEnding:         state.pendingEnding,
                 typedText:             state.typedText,
                 typingFinished:        state.typingFinished,
-                // historyLogs 单独处理：剥离 snap
                 historyLogs:           this._stripHistorySnaps(state.historyLogs),
             };
         } catch (e) {
@@ -226,6 +280,38 @@ export class GameState {
     }
 
     /**
+     * 安全清理 stageCharacters，过滤掉不可序列化字段
+     */
+    _sanitizeStageCharacters(chars) {
+        if (!chars || typeof chars !== 'object') return {};
+        const result = {};
+        for (const [charId, charData] of Object.entries(chars)) {
+            if (!charData || typeof charData !== 'object') continue;
+            // 只保留可安全序列化的核心字段
+            const safe = {
+                id:          String(charData.id || ''),
+                spriteId:    String(charData.spriteId || ''),
+                url:         typeof charData.url === 'string' && charData.url.length < 1024 * 1024 ? charData.url : '',
+                position:    charData.position || 'center',
+                order:       Number(charData.order) || 0,
+                isSpeaking:  !!charData.isSpeaking,
+                speechWeight: Number(charData.speechWeight) || 0,
+                scale:       Number(charData.scale) || 1,
+                opacity:     typeof charData.opacity === 'number' ? charData.opacity : 1,
+                visible:     charData.visible !== false,
+                animation:   String(charData.animation || ''),
+                groupId:     charData.groupId || null,
+                offsetX:     Number(charData.offsetX) || 0,
+                offsetY:     Number(charData.offsetY) || 0,
+                filters:     charData.filters ? { ...charData.filters } : undefined,
+            };
+            if (!safe.filters || Object.keys(safe.filters).length === 0) delete safe.filters;
+            result[charId] = safe;
+        }
+        return result;
+    }
+
+    /**
      * 深拷贝后截断过长的字符串字段
      */
     _truncateLongFields(clone) {
@@ -241,13 +327,24 @@ export class GameState {
             clone.currentScreenEffect = '';
         }
 
-        // stageCharacters URLs
+        // stageCharacters 增强字段的安全性检查
         if (clone.stageCharacters && typeof clone.stageCharacters === 'object') {
             for (const [charId, charData] of Object.entries(clone.stageCharacters)) {
                 if (charData && typeof charData === 'object') {
-                    if (typeof charData.url === 'string' && charData.url.length > MAX_FIELD_STRING_LENGTH) {
-                        clone.stageCharacters[charId] = { ...charData, url: '' };
+                    const cleaned = { ...charData };
+                    if (typeof cleaned.url === 'string' && cleaned.url.length > MAX_FIELD_STRING_LENGTH) {
+                        cleaned.url = '';
                     }
+                    cleaned.scale       = typeof cleaned.scale === 'number' && cleaned.scale > 0 ? cleaned.scale : 1;
+                    cleaned.opacity     = typeof cleaned.opacity === 'number' ? Math.min(1, Math.max(0, cleaned.opacity)) : 1;
+                    cleaned.order       = Number(cleaned.order) || 0;
+                    cleaned.isSpeaking  = !!cleaned.isSpeaking;
+                    cleaned.speechWeight = Number(cleaned.speechWeight) || 0;
+                    cleaned.visible     = cleaned.visible !== false;
+                    cleaned.offsetX     = Number(cleaned.offsetX) || 0;
+                    cleaned.offsetY     = Number(cleaned.offsetY) || 0;
+                    if (!cleaned.position) cleaned.position = 'center';
+                    clone.stageCharacters[charId] = cleaned;
                 }
             }
         }

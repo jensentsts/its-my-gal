@@ -125,19 +125,22 @@ createApp({
         // 默认入口为 'main'
         const entryPoints = reactive({ main: true });
 
-        /** 设置/取消节点为入口 */
-        function toggleEntryPoint(nodeId) {
-            if (entryPoints[nodeId]) {
-                // 至少保留一个入口
-                if (Object.keys(entryPoints).length <= 1) {
-                    showToast('至少需要一个入口节点');
-                    return;
-                }
-                delete entryPoints[nodeId];
-                showToast(`已移除入口: ${nodeId}`);
-            } else {
+        /** 设置唯一入口节点（单选） */
+        function setEntryPoint(nodeId) {
+            const wasActive = !!entryPoints[nodeId];
+            // 清空所有入口
+            for (const key of Object.keys(entryPoints)) {
+                delete entryPoints[key];
+            }
+            if (!wasActive) {
                 entryPoints[nodeId] = true;
                 showToast(`已设为入口: ${nodeId}`);
+            } else {
+                // 点击已选中的入口 → 不取消（至少保留一个）
+                showToast('至少需要一个入口节点');
+                // 恢复默认第一条
+                const first = Object.keys(chapters)[0];
+                if (first) entryPoints[first] = true;
             }
         }
 
@@ -416,11 +419,22 @@ createApp({
                 delete step.cgChanges;
             }
         }
+        /** 角色变更字段白名单（与 editor-actions.js 保持同步） */
+        const CHAR_CHANGE_FIELDS = [
+            'id', 'id1', 'id2', 'ids',
+            'action', 'spriteId', 'animation', 'position',
+            'scale', 'opacity', 'filters',
+            'speak', 'weight', 'weights',
+            'actionId', 'effect', 'duration',
+            'offsetX', 'offsetY', 'spread',
+            'groupId', 'sfx', 'order',
+        ];
+
         function resEditAddCharChange() {
             const step = resEditStep.value;
             if (!step || isStepEditLocked(step)) return;
             if (!step._charChanges) step._charChanges = [];
-            step._charChanges.push({ id: '', action: 'enter', spriteId: '', animation: '' });
+            step._charChanges.push({ id: '', action: 'enter', spriteId: '', animation: '', position: 'center' });
             resEditSyncCharChanges();
         }
         function resEditRemoveCharChange(cci) {
@@ -432,18 +446,48 @@ createApp({
         function resEditSyncCharChanges() {
             const step = resEditStep.value;
             if (!step || isStepEditLocked(step)) return;
-            const valid = (step._charChanges || []).filter(cc => cc.id);
+            const valid = (step._charChanges || []).filter(cc => cc.id || cc.ids || cc.id1 || cc.action === 'clearAll' || cc.action === 'silenceAll');
             if (valid.length > 0) {
-                step.characterChanges = valid.map(cc => ({
-                    id: cc.id, action: cc.action,
-                    spriteId: cc.action !== 'leave' ? cc.spriteId : undefined,
-                    animation: cc.animation || undefined,
-                }));
+                step.characterChanges = valid.map(cc => {
+                    const entry = { action: cc.action };
+                    for (const field of CHAR_CHANGE_FIELDS) {
+                        let val = cc[field];
+                        if (val === undefined || val === null || val === '') continue;
+                        if (Array.isArray(val) && val.length === 0) continue;
+                        if (field === 'ids' && typeof val === 'string') {
+                            val = val.split(/[,，\s]+/).filter(Boolean);
+                            if (val.length === 0) continue;
+                        }
+                        if (field === 'weights' && typeof val === 'string') {
+                            val = val.split(/[,，\s]+/).map(Number).filter(n => !isNaN(n));
+                            if (val.length === 0) continue;
+                        }
+                        entry[field] = val;
+                    }
+                    if (cc.action === 'leave' || cc.action === 'clearAll') {
+                        delete entry.spriteId;
+                    }
+                    return entry;
+                });
             } else {
                 delete step.characterChanges;
             }
         }
-        function resEditOnCharChangeField() { resEditSyncCharChanges(); }
+        function resEditOnCharChangeField() {
+            // 切换 action 时初始化默认值
+            for (const cc of (resEditStep.value?._charChanges || [])) {
+                if (cc.action === 'filter' && !cc.filters) {
+                    cc.filters = { brightness: 1, saturation: 1, contrast: 1 };
+                }
+                if (cc.action === 'gather' && !cc.spread) {
+                    cc.spread = 0.15;
+                }
+                if (cc.action === 'speak' && !cc.weight) {
+                    cc.weight = 1;
+                }
+            }
+            resEditSyncCharChanges();
+        }
         function resEditAddBatchTextSegment() {
             const step = resEditStep.value;
             if (!step || isStepEditLocked(step)) return;
@@ -3123,7 +3167,7 @@ createApp({
             if (isStepEditLocked(editingStep.value)) return;
             if (!editingStep.value) return;
             if (!editingStep.value._charChanges) editingStep.value._charChanges = [];
-            editingStep.value._charChanges.push({ id: '', action: 'enter', spriteId: '', animation: '' });
+            editingStep.value._charChanges.push({ id: '', action: 'enter', spriteId: '', animation: '', position: 'center' });
             syncCharChangesToStep();
         }
 
@@ -3138,26 +3182,58 @@ createApp({
             if (isStepEditLocked(editingStep.value)) return;
             saveUndoSnapshot();
             if (!editingStep.value) return;
-            const valid = (editingStep.value._charChanges || []).filter(cc => cc.id);
+            const valid = (editingStep.value._charChanges || []).filter(cc => cc.id || cc.ids || cc.id1 || cc.action === 'clearAll' || cc.action === 'silenceAll');
             if (valid.length > 0) {
-                editingStep.value.characterChanges = valid.map(cc => ({
-                    id: cc.id,
-                    action: cc.action,
-                    spriteId: cc.action !== 'leave' ? cc.spriteId : undefined,
-                    animation: cc.animation || undefined,
-                }));
+                editingStep.value.characterChanges = valid.map(cc => {
+                    const entry = { action: cc.action };
+                    for (const field of CHAR_CHANGE_FIELDS) {
+                        let val = cc[field];
+                        if (val === undefined || val === null || val === '') continue;
+                        if (Array.isArray(val) && val.length === 0) continue;
+                        if (field === 'ids' && typeof val === 'string') {
+                            val = val.split(/[,，\s]+/).filter(Boolean);
+                            if (val.length === 0) continue;
+                        }
+                        if (field === 'weights' && typeof val === 'string') {
+                            val = val.split(/[,，\s]+/).map(Number).filter(n => !isNaN(n));
+                            if (val.length === 0) continue;
+                        }
+                        entry[field] = val;
+                    }
+                    if (cc.action === 'leave' || cc.action === 'clearAll') {
+                        delete entry.spriteId;
+                    }
+                    return entry;
+                });
             } else {
                 delete editingStep.value.characterChanges;
             }
         }
 
         function onCharChangeField() {
+            // 切换 action 时初始化默认值
+            for (const cc of (editingStep.value?._charChanges || [])) {
+                if (cc.action === 'filter' && !cc.filters) {
+                    cc.filters = { brightness: 1, saturation: 1, contrast: 1 };
+                }
+                if (cc.action === 'gather' && !cc.spread) {
+                    cc.spread = 0.15;
+                }
+                if (cc.action === 'speak' && !cc.weight) {
+                    cc.weight = 1;
+                }
+            }
             syncCharChangesToStep();
         }
 
         function initCharChanges(step) {
             if (!step._charChanges) {
                 step._charChanges = clone(step.characterChanges || []);
+                // 数组字段转逗号分隔字符串（UI 输入框使用）
+                for (const cc of step._charChanges) {
+                    if (Array.isArray(cc.ids)) cc.ids = cc.ids.join(', ');
+                    if (Array.isArray(cc.weights)) cc.weights = cc.weights.join(', ');
+                }
             }
         }
 
@@ -3969,7 +4045,7 @@ createApp({
             startNodeResize, onEdgeClick, onEdgeMouseDown, onEdgeHandleMouseDown, findSnapTarget,
             selectedGroupId, selectGroup, addNodeToGroup, removeNodeFromGroup,
             createGroupFromSelection, deleteGroup, renameGroup, getNodeGroups, contextAddToGroup, contextRemoveFromGroup,
-            entryPoints, toggleEntryPoint, isEntryPoint, getNodeType, isEndingNode,
+            entryPoints, setEntryPoint, isEntryPoint, getNodeType, isEndingNode,
             // 全局
             onGlobalContextMenu, closeGlobalContextMenu,
             startGlobalSearch, endGlobalSearch, navigateToSearchResult,

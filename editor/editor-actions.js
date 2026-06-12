@@ -27,17 +27,20 @@ export function useEditorActions(s, c, deps) {
     }
 
     // ── 入口节点 ─────────────────────────────────────────────
-    function toggleEntryPoint(nodeId) {
-        if (s.entryPoints[nodeId]) {
-            if (Object.keys(s.entryPoints).length <= 1) {
-                showToast('至少需要一个入口节点');
-                return;
-            }
-            delete s.entryPoints[nodeId];
-            showToast(`已移除入口: ${nodeId}`);
-        } else {
+    function setEntryPoint(nodeId) {
+        const wasActive = s.entryPoints[nodeId];
+        // 清空所有入口
+        for (const key of Object.keys(s.entryPoints)) {
+            delete s.entryPoints[key];
+        }
+        if (!wasActive) {
             s.entryPoints[nodeId] = true;
             showToast(`已设为入口: ${nodeId}`);
+        } else {
+            showToast('至少需要一个入口节点');
+            // 恢复第一个节点为入口
+            const first = Object.keys(s.chapters)[0];
+            if (first) s.entryPoints[first] = true;
         }
     }
 
@@ -379,7 +382,7 @@ export function useEditorActions(s, c, deps) {
     function addCharChange() {
         if (!c.editingStep.value) return;
         if (!c.editingStep.value._charChanges) c.editingStep.value._charChanges = [];
-        c.editingStep.value._charChanges.push({ id: '', action: 'enter', spriteId: '', animation: '' });
+        c.editingStep.value._charChanges.push({ id: '', action: 'enter', spriteId: '', animation: '', position: 'center' });
         syncCharChangesToStep();
     }
 
@@ -389,22 +392,64 @@ export function useEditorActions(s, c, deps) {
         syncCharChangesToStep();
     }
 
+    /** 角色变更字段白名单 — 只序列化这些字段到 characterChanges */
+    const CHAR_CHANGE_FIELDS = [
+        'id', 'id1', 'id2', 'ids',
+        'action', 'spriteId', 'animation', 'position',
+        'scale', 'opacity', 'filters',
+        'speak', 'weight', 'weights',
+        'actionId', 'effect', 'duration',
+        'offsetX', 'offsetY', 'spread',
+        'groupId', 'sfx', 'order',
+    ];
+
     function syncCharChangesToStep() {
         if (!c.editingStep.value) return;
-        const valid = (c.editingStep.value._charChanges || []).filter(cc => cc.id);
+        const valid = (c.editingStep.value._charChanges || []).filter(cc => cc.id || cc.ids || cc.id1 || cc.action === 'clearAll' || cc.action === 'silenceAll');
         if (valid.length > 0) {
-            c.editingStep.value.characterChanges = valid.map(cc => ({
-                id: cc.id,
-                action: cc.action,
-                spriteId: cc.action !== 'leave' ? cc.spriteId : undefined,
-                animation: cc.animation || undefined,
-            }));
+            c.editingStep.value.characterChanges = valid.map(cc => {
+                const entry = { action: cc.action };
+                // 复制白名单中所有非空字段
+                for (const field of CHAR_CHANGE_FIELDS) {
+                    let val = cc[field];
+                    if (val === undefined || val === null || val === '') continue;
+                    if (Array.isArray(val) && val.length === 0) continue;
+                    // ids 字段：逗号分隔字符串 → 数组
+                    if (field === 'ids' && typeof val === 'string') {
+                        val = val.split(/[,，\s]+/).filter(Boolean);
+                        if (val.length === 0) continue;
+                    }
+                    // weights 字段：逗号分隔字符串 → 数字数组
+                    if (field === 'weights' && typeof val === 'string') {
+                        val = val.split(/[,，\s]+/).map(Number).filter(n => !isNaN(n));
+                        if (val.length === 0) continue;
+                    }
+                    entry[field] = val;
+                }
+                // leave / clearAll 自动移除 spriteId
+                if (cc.action === 'leave' || cc.action === 'clearAll') {
+                    delete entry.spriteId;
+                }
+                return entry;
+            });
         } else {
             delete c.editingStep.value.characterChanges;
         }
     }
 
     function onCharChangeField() {
+        // 切换 action 时初始化默认值
+        for (const cc of (c.editingStep.value?._charChanges || [])) {
+            if (cc.action === 'filter' && !cc.filters) {
+                cc.filters = { brightness: 1, saturation: 1, contrast: 1 };
+            }
+            if (cc.action === 'gather' && !cc.spread) {
+                cc.spread = 0.15;
+            }
+            if (cc.action === 'speak' && !cc.weight) {
+                cc.weight = 1;
+            }
+        }
         syncCharChangesToStep();
     }
 
