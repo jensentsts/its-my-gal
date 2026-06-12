@@ -523,30 +523,150 @@
     background: rgba(255,107,129,0.08);
 }
 
-/* ---------- 键盘焦点高亮 ---------- */
+/* ---------- 键盘焦点高亮（含鼠标悬浮效果） ---------- */
 .gallery-card-focused {
     outline: none;
+    border-color: rgba(255,107,129,0.6) !important;
+    box-shadow: 0 0 0 3px rgba(255,107,129,0.2), 0 0 20px rgba(255,107,129,0.1);
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+}
+/* 结局卡片悬浮效果（鼠标和键盘统一） */
+.ending-card-badge:hover {
     border-color: rgba(255,107,129,0.4) !important;
-    box-shadow: 0 0 0 2px rgba(255,107,129,0.12), 0 0 15px rgba(255,107,129,0.05);
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.1), 0 4px 16px rgba(255,107,129,0.06);
+}
+.ending-card-badge.gallery-card-focused {
+    border-color: #ff6b81 !important;
+    box-shadow: 0 0 0 3px rgba(255,107,129,0.25), 0 0 25px rgba(255,107,129,0.12);
 }
 .clear-memories-btn.gallery-card-focused {
-    border-color: rgba(255,107,129,0.5);
-    box-shadow: 0 0 0 2px rgba(255,107,129,0.15);
+    border-color: #ff6b81 !important;
+    box-shadow: 0 0 0 3px rgba(255,107,129,0.25), 0 0 20px rgba(255,107,129,0.1);
 }
-.gallery-item.gallery-focused {
+.gallery-item.gallery-focused,
+.gallery-item:hover {
     outline: none;
     border-color: #ff6b81 !important;
-    box-shadow: 0 0 0 2px rgba(255,107,129,0.25), 0 0 20px rgba(255,107,129,0.1);
+    box-shadow: 0 0 0 3px rgba(255,107,129,0.3), 0 0 25px rgba(255,107,129,0.12);
+}
+/* 锁定画廊项的悬浮/聚焦效果 */
+.gallery-item.gallery-focused .gallery-locked,
+.gallery-item:hover .gallery-locked {
+    color: rgba(255,107,129,0.5);
+}
+.gallery-item.gallery-focused .gallery-locked small,
+.gallery-item:hover .gallery-locked small {
+    color: rgba(255,107,129,0.3);
 }
 .save-slot-card.slot-focused {
     border-color: #ff6b81 !important;
-    box-shadow: 0 0 0 2px rgba(255,107,129,0.2), 0 4px 20px rgba(0,0,0,0.3);
+    box-shadow: 0 0 0 3px rgba(255,107,129,0.25), 0 4px 20px rgba(0,0,0,0.3);
+}
+/* 存档卡片悬浮效果 */
+.save-slot-card:hover {
+    border-color: rgba(255,107,129,0.3) !important;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.1), 0 4px 16px rgba(0,0,0,0.3);
 }
 .expression-chip.sprite-focused {
     outline: none;
     box-shadow: 0 0 0 2px rgba(255,107,129,0.4);
     border-color: #ff6b81 !important;
     color: #ff6b81 !important;
+}
+.expression-chip:hover {
+    border-color: rgba(255,107,129,0.3) !important;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.12);
+    color: #ff6b81 !important;
+}
+
+/* ---------- 对话框按钮键盘焦点 ---------- */
+.game-dialog-btn.focused-btn {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.5), 0 0 15px rgba(255,107,129,0.2);
+    transform: scale(1.03);
+}
+.game-dialog-btn.cancel.focused-btn {
+    border-color: rgba(255,107,129,0.5);
+    color: #fff;
+}
+
+/* ---------- 设置 Tab 及内容项键盘焦点 ---------- */
+.settings-tabs button.kb-focused {
+    outline: none;
+    border-color: #ff6b81 !important;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.25), 0 0 10px rgba(255,107,129,0.1);
+    color: #ff6b81 !important;
+}
+.kb-key-btn.kb-focused {
+    outline: none;
+    border-color: #ff6b81 !important;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.2), 0 0 8px rgba(255,107,129,0.08);
+    color: #ff6b81 !important;
+    background: rgba(255,107,129,0.1) !important;
+}
+.reset-btn.kb-focused {
+    outline: none;
+    border-color: rgba(255,107,129,0.5) !important;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.2);
+    color: #fff !important;
+    background: rgba(255,60,60,0.1) !important;
+}
+.setting-preset-row button.kb-focused {
+    outline: none;
+    border-color: #ff6b81 !important;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.2);
+    color: #ff6b81 !important;
+    background: rgba(255,107,129,0.08) !important;
+}
+
+/* ---------- 关于面板 / 灯箱 / 信息区域焦点 ---------- */
+.close-btn.kb-focused {
+    outline: none;
+    border-color: #ff6b81 !important;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.25), 0 0 10px rgba(255,107,129,0.1);
+    background: rgba(255,107,129,0.15);
+    color: #fff !important;
+}
+.lightbox-fallback-close.kb-focused {
+    outline: none;
+    border-color: #ff6b81 !important;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.3);
+    background: rgba(255,107,129,0.15) !important;
+}
+
+/* ---------- 游戏内导航 / 浮窗按钮焦点 ---------- */
+.dock-action-btn.kb-focused {
+    outline: none;
+    border-color: #ff6b81 !important;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.2);
+    color: #ff6b81 !important;
+}
+.rack-glass-btn.kb-focused {
+    outline: none;
+    border-color: #ff6b81 !important;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.2), 0 4px 12px rgba(0,0,0,0.4);
+    background: rgba(255,107,129,0.15) !important;
+    color: #ff6b81 !important;
+}
+
+/* ---------- 结局返回按钮焦点 ---------- */
+.return-main-btn.kb-focused {
+    outline: none;
+    border-color: #fff !important;
+    box-shadow: 0 0 0 2px rgba(255,107,129,0.3), 0 0 20px rgba(255,107,129,0.2);
+    background: rgba(255,107,129,0.25) !important;
+}
+
+/* ---------- 空间导航自动焦点（zone 无数据时 spatialNav 使用） ---------- */
+.spatial-focused {
+    outline: 2px solid #ff6b81 !important;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(255,107,129,0.2), 0 0 20px rgba(255,107,129,0.15);
+    border-color: #ff6b81 !important;
+}
+.spatial-focused:hover {
+    transform: none; /* 防止某些元素的 hover 覆盖焦点样式 */
 }
 
 /* ---------- 响应式：设置面板 ---------- */

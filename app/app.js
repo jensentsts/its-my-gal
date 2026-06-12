@@ -21,6 +21,7 @@ import { useScale }  from './composables/use-scale.js';
 import { useToast }  from './composables/use-toast.js';
 import { useKeybindings } from './composables/use-keybindings.js';
 import { useSettings }   from './composables/use-settings.js';
+import { useVueFocus } from './composables/use-vue-focus.js';
 import { getDynamicItemDescription as getDynamicDesc, getItemIcon, getItemImage, getItemName } from '../engine/index.js';
 
 const { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
@@ -59,6 +60,25 @@ createApp({
         // ── 按键绑定与设置系统 ──
         const keybindings = useKeybindings();
         const userSettings = useSettings();
+
+        // ── 统一焦点管理系统（基于 Vue 的 v-for 自然顺序） ──
+        const focus = useVueFocus();
+        // 预定义所有焦点区域（只需配置列数和循环选项）
+        focus.add('main-menu',            { cols: 1, loop: true });
+        focus.add('settings-keybindings', { cols: 1, loop: true });
+        focus.add('settings-game-presets',{ cols: 1, loop: true });
+        focus.add('info-panel',           { cols: 1, loop: false, wrap: false });
+        focus.add('character-sprites',    { cols: 10, loop: true });
+        focus.add('gallery-grid',         { cols: 4, loop: true });
+        focus.add('endings-grid',         { cols: 4, loop: true });
+        focus.add('chapters-grid',        { cols: 4, loop: true });
+        focus.add('archive-slots-menu',   { cols: 4, loop: true });
+        focus.add('archive-slots-game',   { cols: 4, loop: true });
+        focus.add('inventory',            { cols: 1, loop: true });
+        focus.add('choices',              { cols: 1, loop: true });
+        focus.add('dialog-buttons',       { cols: 2, loop: false, wrap: false });
+        focus.add('game-dock',            { cols: 3, loop: false, wrap: false });
+        focus.add('game-floating',        { cols: 2, loop: false, wrap: false });
 
         // 同步游戏标题到页面 title（从 package/game config 读取）
         document.title = engineInputData.GAME_CONFIG?.title || 'Galgame';
@@ -126,64 +146,94 @@ createApp({
             currentStep.value ? (currentStep.value.choices || []) : []
         );
 
-        const highlightedChoiceIndex = ref(0);
-        // 步骤/选项变化时重置高亮
-        watch([currentStep, availableChoices], () => { highlightedChoiceIndex.value = 0; });
+        // ── 分支选项焦点（每次选择触发的 index 由模板 @mouseenter 同步） ──
+        // 无额外操作，焦点 index 通过 focus.go() 驱动
 
-        // ── 主菜单键盘导航 ──
-        const menuFocusIndex = ref(0);
+        // ── 主菜单键盘导航（通过 focus 管理） ──
         const menuItems = computed(() => {
-            const items = [];
+            const raw = [];
             if (engineCtx.hasExitSave.value) {
-                items.push({ label: '▶ 继续游戏', action: continueFromExit, cls: 'btn-continue' });
+                raw.push({ label: '▶ 继续游戏', action: continueFromExit, cls: 'btn-continue' });
             }
-            items.push(
+            raw.push(
                 { label: '从已有存档继续', action: () => openArchiveSlotsPanel('load'), cls: '' },
                 { label: '新的旅程', action: confirmStartNewGame, cls: '' },
                 { label: '角色名录', action: openCharactersPanel, cls: '' },
                 { label: '画廊 CG 图鉴', action: () => { engineCtx.activeMenuPanel.value = 'gallery'; }, cls: '' },
             );
-            return items;
+            return raw;
         });
-        // 菜单项变化时（如隐藏"继续游戏"）修正焦点索引
-        watch(menuItems, (items) => {
-            if (menuFocusIndex.value >= items.length) {
-                menuFocusIndex.value = items.length - 1;
-            }
-        });
-        // 进入主菜单时复位焦点
-        watch(() => engineCtx.currentView.value, (view) => {
-            if (view === 'menu') menuFocusIndex.value = 0;
-        });
+        // 菜单内容变化时复位焦点到第一个选项
+        watch(menuItems, () => {
+            focus.to('main-menu', 0);
+        }, { immediate: true });
 
         // ── 设置面板 ──
         const showSettings = Vue.ref(false);
         const settingsTab = Vue.ref('keyboard'); // 'keyboard' | 'game'
         const capturingActionId = Vue.ref(null); // 正在捕获按键的动作 ID
+        const showInfoPanel = ref(false);
 
         function openSettings() { showSettings.value = true; settingsTab.value = 'keyboard'; }
         function closeSettings() { keybindings.cancelCapture(); capturingActionId.value = null; showSettings.value = false; }
+        function openInfoPanel() { showInfoPanel.value = true; }
+        function closeInfoPanel() { showInfoPanel.value = false; }
 
-        // ── 画廊键盘导航 ──
-        const galleryFocusIndex = Vue.ref(0);
+        // ── 画廊键盘导航（多区域：CG 网格 / 结局 / 章节 / 清除记忆） ──
+        const fullEndingsList = Vue.computed(() => resolveData('ENDINGS'));
+        const chapterDescriptions = Vue.computed(() => resolveData('CHAPTER_DESCRIPTIONS'));
         const galleryCgIds = Vue.computed(() => Object.keys(resolveData('CG_LIBRARY') || {}));
-        watch(galleryCgIds, (ids) => { if (galleryFocusIndex.value >= ids.length) galleryFocusIndex.value = ids.length - 1; });
-        // 画廊面板多区域导航：画廊网格 / 结局 / 章节 / 清除记忆
         const gallerySection = Vue.ref('gallery');
-        const endingFocusIndex = Vue.ref(0);
-        const chapterFocusIndex = Vue.ref(0);
-
-        // ── 存档槽位键盘导航 ──
-        const slotFocusIndex = Vue.ref(0);
-
-        // ── 角色表情导航 ──
-        const spriteFocusIndex = Vue.ref(0);
-
-        // ── 背包物品导航 ──
-        const inventoryFocusIndex = Vue.ref(0);
-        watch(() => engineCtx.gameState.value.inventory, (inv) => {
-            if (inventoryFocusIndex.value >= inv.length) inventoryFocusIndex.value = inv.length - 1;
+        // 进入画廊区域时复位焦点
+        watch(() => engineCtx.activeMenuPanel.value, (panel) => {
+            if (panel === 'gallery') focus.to('gallery-grid', 0);
         });
+
+        // ── 存档槽位键盘导航（焦点 index 由模板 @mouseenter 同步） ──
+        // 存档数据变化时复位焦点
+        watch(() => engineCtx.saveSlotsData.value, () => {
+            focus.to('archive-slots-menu', 0);
+            focus.to('archive-slots-game', 0);
+        }, { immediate: true });
+
+        // ── 角色表情导航（焦点 index 由模板 @mouseenter 同步） ──
+
+        // ── 背包物品导航（焦点 index 由模板 @mouseenter 同步） ──
+
+        // ── 对话框按钮导航 ──
+        watch(() => engineCtx.dialogState, (d) => {
+            if (d.show) focus.to('dialog-buttons', 0);
+        }, { deep: true, immediate: true });
+
+        // ── 设置内容区导航 ──
+        // 切换标签时复位焦点
+        watch(() => settingsTab.value, (tab) => {
+            if (showSettings.value) {
+                if (tab === 'keyboard') focus.to('settings-keybindings', 0);
+                else focus.to('settings-game-presets', 0);
+            }
+        });
+        // 打开设置面板时复位焦点
+        watch(() => showSettings.value, (v) => {
+            if (v) {
+                if (settingsTab.value === 'keyboard') focus.to('settings-keybindings', 0);
+                else focus.to('settings-game-presets', 0);
+            }
+        });
+
+        // ── 关于面板 ──
+        watch(() => showInfoPanel.value, (v) => {
+            if (v) focus.to('info-panel', 0);
+        });
+
+        // ── 游戏顶部导航栏（直接使用固定索引激活） ──
+        // game-dock: [退出暂存, 存入节点, 读取节点]
+        // game-floating: [历史记录, 背包]
+        // 以上区域由模板 @mouseenter 同步焦点
+
+        // ── 灯箱（关灯箱按钮直接由 @click 处理，无需焦点管理） ──
+
+        // ── 角色列表导航（在 navigateCharList 中直接使用数组索引） ──
 
         const viewportStyle = computed(() => {
             const cfg = resolveData('GAME_CONFIG');
@@ -475,11 +525,6 @@ createApp({
             switchInspectedCharacter(firstId);
         }
 
-        // ── 关于面板 ──
-        const showInfoPanel = ref(false);
-        function openInfoPanel() { showInfoPanel.value = true; }
-        function closeInfoPanel() { showInfoPanel.value = false; }
-
         function switchInspectedCharacter(charId) {
             engineCtx.activeInspectedCharId.value = charId;
             if (charId && resolveData('CHARACTERS')[charId]) {
@@ -724,6 +769,37 @@ createApp({
             return null;
         });
 
+        // ── 当前焦点区域 ID：根据上下文 + 面板状态推导 ──
+        const activeZoneId = computed(() => {
+            if (engineCtx.dialogState.show) return 'dialog-buttons';
+            if (engineCtx.currentView.value === 'game') {
+                if (currentStep.value?.type === 'choice') return 'choices';
+                if (engineCtx.showInventory.value) return 'inventory';
+                if (engineCtx.activeGamePanel.value) return 'archive-slots-game';
+                return null;
+            }
+            if (engineCtx.currentView.value === 'menu') {
+                if (showSettings.value) {
+                    return settingsTab.value === 'keyboard'
+                        ? 'settings-keybindings'
+                        : 'settings-game-presets';
+                }
+                if (showInfoPanel.value) return 'info-panel';
+                if (engineCtx.activeMenuPanel.value) {
+                    const panel = engineCtx.activeMenuPanel.value;
+                    if (panel === 'gallery') {
+                        const sec = gallerySection.value;
+                        if (sec === 'gallery') return 'gallery-grid';
+                        if (sec === 'endings') return 'endings-grid';
+                        if (sec === 'chapters') return 'chapters-grid';
+                    }
+                    if (panel === 'archiveSlots') return 'archive-slots-menu';
+                }
+                return 'main-menu';
+            }
+            return null;
+        });
+
         // ── 主入口：keydown → 匹配动作 → 派发 ──
         function onGlobalKeyDown(e) {
             // 输入框中不响应快捷键（ESC 放行）
@@ -759,14 +835,14 @@ createApp({
                 case 'global.new-game':
                     confirmStartNewGame(); break;
 
-                // ════════ 主菜单 ════════
+                // ════════ 主菜单（通过 zone 顺序导航） ════════
                 case 'menu.navigate-up':
-                    navigateMenu(-1); break;
+                    keyNavigate('up'); break;
                 case 'menu.navigate-down':
-                    navigateMenu(1); break;
+                    keyNavigate('down'); break;
                 case 'menu.activate':
                 case 'menu.activate-alt':
-                    activateMenuItem(); break;
+                    keyActivate(); break;
                 case 'menu.open-info':
                     openInfoPanel(); break;
                 case 'menu.open-settings':
@@ -775,10 +851,24 @@ createApp({
                 // ════════ 设置面板 ════════
                 case 'settings.close':
                     closeSettings(); break;
+                case 'settings.navigate-up':
+                    keyNavigate('up'); break;
+                case 'settings.navigate-down':
+                    keyNavigate('down'); break;
+                case 'settings.navigate-left':
+                    keyNavigate('left'); break;
+                case 'settings.navigate-right':
+                    keyNavigate('right'); break;
+                case 'settings.activate':
+                case 'settings.activate-alt':
+                    keyActivate(); break;
 
                 // ════════ 关于面板 ════════
                 case 'info-panel.close':
                     closeInfoPanel(); break;
+                case 'info-panel.activate':
+                case 'info-panel.activate-alt':
+                    keyActivate(); break;
 
                 // ════════ 菜单子面板（角色名录 / 画廊 / 存档） ════════
                 case 'menu-panel.close':
@@ -823,12 +913,17 @@ createApp({
 
                 // ════════ 分支选项 ════════
                 case 'choice.navigate-up':
-                    navigateChoice(-1); break;
+                    focus.go('choices', 'up', availableChoices.value.length); break;
                 case 'choice.navigate-down':
-                    navigateChoice(1); break;
+                    focus.go('choices', 'down', availableChoices.value.length); break;
                 case 'choice.confirm':
-                case 'choice.confirm-alt':
-                    startChoiceHold(availableChoices.value[highlightedChoiceIndex.value]); break;
+                case 'choice.confirm-alt': {
+                    const ci = focus.idx('choices');
+                    if (ci >= 0 && ci < availableChoices.value.length) {
+                        startChoiceHold(availableChoices.value[ci]);
+                    }
+                    break;
+                }
 
                 // ════════ 物品提示 ════════
                 case 'item-toast.dismiss':
@@ -839,9 +934,9 @@ createApp({
                 case 'inventory.close':
                     engineCtx.showInventory.value = false; break;
                 case 'inventory.navigate-up':
-                    navigateInventory(-1); break;
+                    focus.go('inventory', 'up', (engineCtx.gameState.value.inventory || []).length); break;
                 case 'inventory.navigate-down':
-                    navigateInventory(1); break;
+                    focus.go('inventory', 'down', (engineCtx.gameState.value.inventory || []).length); break;
                 case 'inventory.activate':
                     selectItemForInspection(engineCtx.selectedBagItemId.value);
                     break;
@@ -850,13 +945,13 @@ createApp({
                 case 'game-panel.close':
                     engineCtx.activeGamePanel.value = null; break;
                 case 'game-panel.navigate-up':
-                    navigateGamePanelSlots(-1, 0); break;
+                    focus.go('archive-slots-game', 'up', 16); break;
                 case 'game-panel.navigate-down':
-                    navigateGamePanelSlots(1, 0); break;
+                    focus.go('archive-slots-game', 'down', 16); break;
                 case 'game-panel.navigate-left':
-                    navigateGamePanelSlots(0, -1); break;
+                    focus.go('archive-slots-game', 'left', 16); break;
                 case 'game-panel.navigate-right':
-                    navigateGamePanelSlots(0, 1); break;
+                    focus.go('archive-slots-game', 'right', 16); break;
                 case 'game-panel.activate':
                     activateGamePanelSlot(); break;
 
@@ -867,6 +962,13 @@ createApp({
                 // ════════ 对话框 ════════
                 case 'dialog.cancel':
                     engineCtx.closeDialog(null); break;
+                case 'dialog.navigate-left':
+                    keyNavigate('left'); break;
+                case 'dialog.navigate-right':
+                    keyNavigate('right'); break;
+                case 'dialog.activate':
+                case 'dialog.activate-alt':
+                    keyActivate(); break;
 
                 // ════════ 结局画面 ════════
                 case 'ending.return':
@@ -875,28 +977,7 @@ createApp({
             }
         }
 
-        // ── 上下文辅助函数 ──
-        function navigateChoice(dir) {
-            const choices = availableChoices.value;
-            if (!choices.length) return;
-            const len = choices.length;
-            highlightedChoiceIndex.value = ((highlightedChoiceIndex.value + dir) % len + len) % len;
-            scrollFocused('.choice-item.choice-highlighted');
-        }
-
-        function navigateMenu(dir) {
-            const len = menuItems.value.length;
-            if (!len) return;
-            menuFocusIndex.value = ((menuFocusIndex.value + dir) % len + len) % len;
-            scrollFocused('.btn.menu-focused');
-        }
-
-        function activateMenuItem() {
-            const item = menuItems.value[menuFocusIndex.value];
-            if (item) item.action();
-        }
-
-        // ── 键盘导航后自动滚动到焦点元素（确保可见） ──
+        // ── 上下文辅助函数（通过 focus 管理） ──
         function scrollFocused(selector) {
             Vue.nextTick(() => {
                 const el = document.querySelector(selector);
@@ -916,7 +997,10 @@ createApp({
             } else if (panel === 'gallery') {
                 navigateGalleryGrid(dy, dx);
             } else if (panel === 'archiveSlots') {
-                navigateMenuSlots(dy, dx);
+                if (dy < 0) focus.go('archive-slots-menu', 'up', 16);
+                if (dy > 0) focus.go('archive-slots-menu', 'down', 16);
+                if (dx < 0) focus.go('archive-slots-menu', 'left', 16);
+                if (dx > 0) focus.go('archive-slots-menu', 'right', 16);
             }
         }
 
@@ -932,6 +1016,149 @@ createApp({
             else if (panel === 'characters') openCharSpriteLightbox();
         }
 
+        /**
+         * 统一导航：使用 Vue 自然顺序导航
+         *   - 左右按键 → 按 index +/- 1 移动
+         *   - 上下按键 → 按 cols 列数跨行移动（+cols/-cols）
+         *   - 跨区跨越由 activeZoneId 逻辑和容器代码处理
+         */
+        function keyNavigate(dir) {
+            const zone = activeZoneId.value;
+            if (!zone) return;
+
+            // 根据当前 zone 获取 v-for 数组长度
+            const total = _getZoneTotal(zone);
+            if (total > 0) focus.go(zone, dir, total);
+        }
+
+        /**
+         * 统一激活：激活当前 zone 的焦点项
+         * 不再依赖 zone 存储的 item action，而是直接根据 zone 类型和 index 派发
+         */
+        function keyActivate() {
+            const zone = activeZoneId.value;
+            if (!zone) return;
+
+            const total = _getZoneTotal(zone);
+            if (total <= 0) return;
+
+            const idx = focus.idx(zone);
+
+            // ── 各区域激活派发 ──
+            switch (zone) {
+                case 'main-menu': {
+                    const items = menuItems.value;
+                    if (idx >= 0 && idx < items.length) items[idx].action();
+                    break;
+                }
+                case 'choices': {
+                    if (idx >= 0 && idx < availableChoices.value.length) {
+                        startChoiceHold(availableChoices.value[idx]);
+                    }
+                    break;
+                }
+                case 'dialog-buttons': {
+                    const d = engineCtx.dialogState;
+                    if (d.type !== 'alert' && idx === 0) {
+                        engineCtx.closeDialog(null);
+                    } else {
+                        const val = d.type === 'prompt' ? d.promptValue : true;
+                        engineCtx.closeDialog(val);
+                    }
+                    break;
+                }
+                case 'settings-keybindings': {
+                    const flat = _getSettingsActionsFlat();
+                    if (idx >= 0 && idx < flat.length) {
+                        const action = flat[idx];
+                        capturingActionId.value = action.id;
+                        keybindings.startCapture().then(keyDef => {
+                            capturingActionId.value = null;
+                            if (!keyDef) return;
+                            const ctx2 = keybindings.getBinding(action.id)?.context || 'global';
+                            const conflict = keybindings.findConflict(ctx2, keyDef, action.id);
+                            if (conflict) keybindings.removeBinding(conflict.actionId);
+                            keybindings.setBinding(action.id, keyDef);
+                            nextTick(() => focus.to('settings-keybindings', idx));
+                        });
+                    }
+                    break;
+                }
+                case 'settings-game-presets': {
+                    const presets = userSettings.TEXT_SPEED_PRESETS || [];
+                    if (idx >= 0 && idx < presets.length) {
+                        userSettings.update('textSpeed', presets[idx].value);
+                    } else if (idx === presets.length) {
+                        userSettings.resetToDefaults();
+                    }
+                    break;
+                }
+                case 'info-panel':
+                    closeInfoPanel();
+                    break;
+                case 'gallery-grid':
+                    activateGalleryItem();
+                    break;
+                case 'archive-slots-menu':
+                    activateMenuSlot();
+                    break;
+                case 'archive-slots-game':
+                    activateGamePanelSlot();
+                    break;
+                case 'game-dock': {
+                    if (idx === 0) safelyExitToMenu();
+                    else if (idx === 1) openArchiveSlotsPanel('save');
+                    else if (idx === 2) openArchiveSlotsPanel('load');
+                    break;
+                }
+                case 'game-floating': {
+                    if (idx === 0) engineCtx.showLog.value = !engineCtx.showLog.value;
+                    else if (idx === 1) openInventoryPanel();
+                    break;
+                }
+            }
+        }
+
+        /** 获取设置面板按键绑定区域的扁平动作列表 */
+        function _getSettingsActionsFlat() {
+            const groups = keybindings.getActionsByGroup();
+            const flat = [];
+            for (const ctx of Object.keys(groups)) {
+                for (const action of groups[ctx].actions) {
+                    flat.push(action);
+                }
+            }
+            return flat;
+        }
+
+        /** 获取当前聚焦区域的 v-for 数组长度 */
+        function _getZoneTotal(zone) {
+            switch (zone) {
+                case 'main-menu': return menuItems.value.length;
+                case 'choices': return availableChoices.value.length;
+                case 'dialog-buttons': return engineCtx.dialogState.type !== 'alert' ? 2 : 1;
+                case 'settings-keybindings':
+                    return _getSettingsActionsFlat().length;
+                case 'settings-game-presets': return (userSettings.TEXT_SPEED_PRESETS || []).length + 1; // +1 for reset btn
+                case 'info-panel': return 1;
+                case 'gallery-grid': return galleryCgIds.value.length;
+                case 'endings-grid': return (fullEndingsList.value || []).length;
+                case 'chapters-grid': return Object.keys(chapterDescriptions.value || {}).length;
+                case 'archive-slots-menu': return 16;
+                case 'archive-slots-game': return 16;
+                case 'inventory': return (engineCtx.gameState.value.inventory || []).length;
+                case 'game-dock': return 3;
+                case 'game-floating': return 2;
+                case 'character-sprites': {
+                    const char = resolveData('CHARACTERS')[engineCtx.activeInspectedCharId.value];
+                    if (!char || !char.sprites) return 0;
+                    const list = Array.isArray(char.sprites) ? char.sprites : Object.values(char.sprites);
+                    return list.length;
+                }
+                default: return 0;
+            }
+        }
+
         // ── 角色列表导航 ──
         function navigateCharList(dir) {
             const ids = Object.keys(resolveData('CHARACTERS'));
@@ -944,16 +1171,19 @@ createApp({
             scrollFocused('.archive-nav-item.active');
         }
 
-        // ── 角色表情导航（兼容数组/对象两种格式） ──
+        // ── 角色表情导航（基于 Vue 顺序） ──
         function navigateCharSprites(dir) {
             const char = resolveData('CHARACTERS')[engineCtx.activeInspectedCharId.value];
             if (!char || !char.sprites) return;
             const spriteList = Array.isArray(char.sprites) ? char.sprites : Object.values(char.sprites);
-            if (!spriteList.length) return;
-            const cur = spriteList.findIndex(s => s.id === engineCtx.activeSpriteIdForInspection.value);
-            const next = ((cur + dir) % spriteList.length + spriteList.length) % spriteList.length;
-            if (next >= 0 && next < spriteList.length) {
-                switchInspectedSprite(spriteList[next].id);
+            const dirMap = dir < 0 ? 'left' : 'right';
+            focus.go('character-sprites', dirMap, spriteList.length);
+            const idx = focus.idx('character-sprites');
+            if (idx >= 0 && idx < spriteList.length) {
+                const sid = spriteList[idx].id;
+                if (sid && sid !== engineCtx.activeSpriteIdForInspection.value) {
+                    switchInspectedSprite(sid);
+                }
             }
             scrollFocused('.expression-chip.sprite-focused');
         }
@@ -964,85 +1194,85 @@ createApp({
             }
         }
 
-        // ── 画廊导航（多区域：CG 网格 / 结局 / 章节 / 清除记忆） ──
+        // ── 画廊导航（多区域跨越：CG 网格 → 结局 → 章节 → 清除记忆） ──
         function navigateGalleryGrid(dy, dx) {
             const section = gallerySection.value;
-            const cols = 4;
+            const dirX = dx < 0 ? 'left' : dx > 0 ? 'right' : null;
+            const dirY = dy < 0 ? 'up' : dy > 0 ? 'down' : null;
 
             if (section === 'gallery') {
                 const ids = galleryCgIds.value;
                 if (!ids.length) return;
-                let idx = galleryFocusIndex.value;
-                if (dx !== 0) idx += dx;
-                if (dy !== 0) {
-                    const next = idx + dy * cols;
-                    if (dy > 0 && next >= ids.length) {
+                if (dirX) { focus.go('gallery-grid', dirX, ids.length); return; }
+                if (dirY === 'down') {
+                    const old = focus.idx('gallery-grid');
+                    focus.go('gallery-grid', 'down', ids.length);
+                    if (focus.idx('gallery-grid') === old && old >= 0) {
+                        // 触底 → 跨越到结局区
                         gallerySection.value = 'endings';
-                        endingFocusIndex.value = 0;
+                        focus.to('endings-grid', 0);
                         scrollFocused('.gallery-card-focused');
                         return;
                     }
-                    if (dy < 0 && next < 0) { idx = 0; }
-                    else { idx = next; }
+                } else if (dirY === 'up') {
+                    focus.go('gallery-grid', 'up', ids.length);
                 }
-                idx = ((idx % ids.length) + ids.length) % ids.length;
-                galleryFocusIndex.value = idx;
                 scrollFocused('.gallery-item.gallery-focused');
 
             } else if (section === 'endings') {
                 const list = fullEndingsList.value;
                 if (!list || !list.length) return;
-                let idx = endingFocusIndex.value;
-                if (dx !== 0) idx += dx;
-                if (dy !== 0) {
-                    const next = idx + dy * cols;
-                    if (dy > 0 && next >= list.length) {
+                if (dirX) { focus.go('endings-grid', dirX, list.length); scrollFocused('.gallery-card-focused'); return; }
+                if (dirY === 'down') {
+                    const old = focus.idx('endings-grid');
+                    focus.go('endings-grid', 'down', list.length);
+                    if (focus.idx('endings-grid') === old && old >= 0) {
                         gallerySection.value = 'chapters';
-                        chapterFocusIndex.value = 0;
+                        focus.to('chapters-grid', 0);
                         scrollFocused('.gallery-card-focused');
                         return;
                     }
-                    if (dy < 0 && next < 0) {
+                } else if (dirY === 'up') {
+                    const old = focus.idx('endings-grid');
+                    focus.go('endings-grid', 'up', list.length);
+                    if (focus.idx('endings-grid') === old && old >= 0) {
                         gallerySection.value = 'gallery';
-                        galleryFocusIndex.value = galleryCgIds.value.length - 1;
+                        focus.to('gallery-grid', Math.max(0, galleryCgIds.value.length - 1));
                         scrollFocused('.gallery-item.gallery-focused');
                         return;
                     }
-                    idx = next;
                 }
-                idx = ((idx % list.length) + list.length) % list.length;
-                endingFocusIndex.value = idx;
                 scrollFocused('.gallery-card-focused');
 
             } else if (section === 'chapters') {
                 const chs = Object.keys(chapterDescriptions.value || {});
                 if (!chs.length) return;
-                let idx = chapterFocusIndex.value;
-                if (dx !== 0) idx += dx;
-                if (dy !== 0) {
-                    const next = idx + dy * cols;
-                    if (dy > 0 && next >= chs.length) {
+                if (dirX) { focus.go('chapters-grid', dirX, chs.length); scrollFocused('.gallery-card-focused'); return; }
+                if (dirY === 'down') {
+                    const old = focus.idx('chapters-grid');
+                    focus.go('chapters-grid', 'down', chs.length);
+                    if (focus.idx('chapters-grid') === old && old >= 0) {
                         gallerySection.value = 'clear';
-                        scrollFocused('.clear-memories-btn.gallery-card-focused');
+                        scrollFocused('.clear-memories-btn');
                         return;
                     }
-                    if (dy < 0 && next < 0) {
+                } else if (dirY === 'up') {
+                    const old = focus.idx('chapters-grid');
+                    focus.go('chapters-grid', 'up', chs.length);
+                    if (focus.idx('chapters-grid') === old && old >= 0) {
                         gallerySection.value = 'endings';
-                        endingFocusIndex.value = (fullEndingsList.value || []).length - 1;
+                        focus.to('endings-grid', Math.max(0, (fullEndingsList.value || []).length - 1));
                         scrollFocused('.gallery-card-focused');
                         return;
                     }
-                    idx = next;
                 }
-                idx = ((idx % chs.length) + chs.length) % chs.length;
-                chapterFocusIndex.value = idx;
                 scrollFocused('.gallery-card-focused');
 
             } else if (section === 'clear') {
                 if (dy < 0) {
                     gallerySection.value = 'chapters';
                     const chs = Object.keys(chapterDescriptions.value || {});
-                    chapterFocusIndex.value = Math.max(0, chs.length - 1);
+                    focus.to('chapters-grid', Math.max(0, chs.length - 1));
                     scrollFocused('.gallery-card-focused');
                 }
             }
@@ -1051,25 +1281,19 @@ createApp({
         function activateGalleryItem() {
             const ids = galleryCgIds.value;
             if (!ids.length) return;
-            const id = ids[galleryFocusIndex.value];
+            const idx = focus.idx('gallery-grid');
+            if (idx < 0 || idx >= ids.length) return;
+            const id = ids[idx];
             if (id && engineCtx.unlockedGalleries.value[id]) {
                 clickGalleryItem(id);
             }
         }
 
         // ── 菜单存档槽位导航 ──
-        function navigateMenuSlots(dy, dx) {
-            const cols = 4;
-            let idx = slotFocusIndex.value;
-            if (dx !== 0) idx += dx;
-            if (dy !== 0) idx += dy * cols;
-            idx = Math.max(0, Math.min(15, idx));
-            slotFocusIndex.value = idx;
-            scrollFocused('.save-slot-card.slot-focused');
-        }
-
         function activateMenuSlot() {
-            const slotId = slotFocusIndex.value + 1;
+            const idx = focus.idx('archive-slots-menu');
+            if (idx < 0) return;
+            const slotId = idx + 1;
             if (engineCtx.archiveMode.value === 'save') {
                 executeSlotSave(slotId);
             } else if (engineCtx.saveSlotsData.value[slotId]) {
@@ -1078,40 +1302,15 @@ createApp({
         }
 
         // ── 游戏内存档面板导航 ──
-        const gamePanelSlotFocus = Vue.ref(0);
-
-        function navigateGamePanelSlots(dy, dx) {
-            const cols = 4;
-            let idx = gamePanelSlotFocus.value;
-            if (dx !== 0) idx += dx;
-            if (dy !== 0) idx += dy * cols;
-            idx = Math.max(0, Math.min(15, idx));
-            gamePanelSlotFocus.value = idx;
-            scrollFocused('.save-slot-card.slot-focused');
-        }
-
         function activateGamePanelSlot() {
-            const slotId = gamePanelSlotFocus.value + 1;
+            const idx = focus.idx('archive-slots-game');
+            if (idx < 0) return;
+            const slotId = idx + 1;
             if (engineCtx.archiveMode.value === 'save') {
                 executeSlotSave(slotId);
             } else if (engineCtx.saveSlotsData.value[slotId]) {
                 executeSlotLoad(slotId);
             }
-        }
-
-        // ── 背包物品导航 ──
-        function navigateInventory(dir) {
-            const inv = engineCtx.gameState.value.inventory;
-            if (!inv.length) return;
-            const len = inv.length;
-            const cur = inv.indexOf(engineCtx.selectedBagItemId.value);
-            let next = cur + dir;
-            if (next < 0) next = len - 1;
-            if (next >= len) next = 0;
-            if (next >= 0 && next < len) {
-                selectItemForInspection(inv[next]);
-            }
-            scrollFocused('.clickable-item.selected-item');
         }
 
         // ── keyup（先喂给捕获系统，再处理长按取消） ──
@@ -1236,7 +1435,6 @@ createApp({
             // 计算属性
             currentStep, currentSpeakerId, currentSpeakerName, currentSpeakerColor,
             currentAvatarUrl, shouldShowAvatar, availableChoices,
-            highlightedChoiceIndex,
             viewportStyle, backgroundStyle, homeBackgroundStyle, panelBackgroundStyle,
             homeEffectMaskClasses, effectMaskClasses,
             inspectedChar, activeInspectedSpriteLabel, getArchiveEmoji,
@@ -1246,8 +1444,8 @@ createApp({
             homeConfig: computed(() => resolveData('HOME_CONFIG')),
             assetsCharacters: computed(() => resolveData('CHARACTERS')),
             assetsCgLibrary: computed(() => resolveData('CG_LIBRARY')),
-            fullEndingsList: computed(() => resolveData('ENDINGS')),
-            chapterDescriptions: computed(() => resolveData('CHAPTER_DESCRIPTIONS')),
+            fullEndingsList,
+            chapterDescriptions,
             // 方法（保持与原模板同名）
             ENGINE_VERSION, STORY_VERSION,
             showInfoPanel, closeInfoPanel, openInfoPanel,
@@ -1267,19 +1465,17 @@ createApp({
             // 选项长按选择 / 结局长按确认
             choiceHoldProgress, choiceHolding,
             endingHoldProgress, endingHolding,
-            // 主菜单键盘导航
-            menuFocusIndex, menuItems,
+            // ════ 焦点管理系统（基于 Vue 自然顺序） ════
+            focus,
+            activeZoneId,
+            menuItems,
+            galleryCgIds, gallerySection,
             // ── 设置与按键绑定 ──
             keybindings, userSettings,
             showSettings, settingsTab, openSettings, closeSettings,
             capturingActionId,
             // 捕获预览（顶层 ref，模板自动解包）
             capturedPreview: computed(() => keybindings.capturedPreview.value),
-            // ── 画廊/存档/角色键盘导航 ──
-            galleryFocusIndex, galleryCgIds, gallerySection,
-            endingFocusIndex, chapterFocusIndex,
-            slotFocusIndex, spriteFocusIndex,
-            gamePanelSlotFocus, inventoryFocusIndex,
             // ── 设置面板方法 ──
             textSpeed: computed(() => userSettings.settings.value.textSpeed),
             textSpeedPresets: userSettings.TEXT_SPEED_PRESETS,

@@ -18,6 +18,11 @@ const GROUP_LABELS = {
     settings:    '设置面板',
     'info-panel':'关于面板',
     'menu-panel':'子面板（角色名录 / 画廊 / 存档）',
+    dialog:      '对话框',
+    ending:      '结局画面',
+    lightbox:    '灯箱查看',
+    'game-panel':'游戏内面板',
+    game:        '游戏主视图',
     game:        '游戏主视图',
     choice:      '分支选项',
     'item-toast':'物品提示',
@@ -48,9 +53,17 @@ const DEFAULT_BINDINGS = {
 
     // ════════ 设置面板 ════════
     'settings.close':       { key: 'Escape',    label: '关闭设置',         context: 'settings' },
+    'settings.navigate-up':   { key: 'ArrowUp',   label: '设置上移',       context: 'settings' },
+    'settings.navigate-down': { key: 'ArrowDown', label: '设置下移',       context: 'settings' },
+    'settings.navigate-left': { key: 'ArrowLeft', label: '设置左移',       context: 'settings' },
+    'settings.navigate-right':{ key: 'ArrowRight',label: '设置右移',       context: 'settings' },
+    'settings.activate':      { key: 'Enter',     label: '激活设置项',     context: 'settings' },
+    'settings.activate-alt':  { key: ' ',         label: '激活设置项（空格）', context: 'settings' },
 
     // ════════ 关于面板 ════════
     'info-panel.close':     { key: 'Escape',    label: '关闭关于',         context: 'info-panel' },
+    'info-panel.activate':  { key: 'Enter',     label: '确认',             context: 'info-panel' },
+    'info-panel.activate-alt': { key: ' ',      label: '确认（空格）',     context: 'info-panel' },
 
     // ════════ 菜单子面板（角色名录 / 画廊 / 存档） ════════
     'menu-panel.close':        { key: 'Escape',    label: '关闭面板',      context: 'menu-panel' },
@@ -98,6 +111,10 @@ const DEFAULT_BINDINGS = {
 
     // ════════ 对话框 ════════
     'dialog.cancel':         { key: 'Escape',    label: '取消',            context: 'dialog' },
+    'dialog.navigate-left':  { key: 'ArrowLeft', label: '左移焦点',        context: 'dialog' },
+    'dialog.navigate-right': { key: 'ArrowRight',label: '右移焦点',        context: 'dialog' },
+    'dialog.activate':       { key: 'Enter',     label: '确认选择',        context: 'dialog' },
+    'dialog.activate-alt':   { key: ' ',         label: '确认选择（空格）',context: 'dialog' },
 
     // ════════ 结局画面 ════════
     'ending.return':         { key: 'Enter',     label: '返回主菜单',      context: 'ending' },

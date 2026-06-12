@@ -498,3 +498,12 @@
 
 /* ---------- 对话框内边距补偿 ---------- */
 .dialogue-panel { padding-right:40px; bottom:20px !important; }
+
+/* ---------- 空间导航自动焦点（game 面板内控件） ---------- */
+.spatial-focused {
+    outline: 2px solid #ff6b81 !important;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(255,107,129,0.2), 0 0 20px rgba(255,107,129,0.15);
+    border-color: #ff6b81 !important;
+    z-index: 100;
+}

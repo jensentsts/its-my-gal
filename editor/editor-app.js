@@ -15,6 +15,7 @@ import * as GameData from '../resource-packs/default/index.js';
 import { ResourceManager, validatePackStructure, validatePackData, EffectsManager, ResourcePathResolver } from '../engine/index.js';
 import { analyzeTree, computeLayout, computeEndingLayout, computeEdgePath } from './tree-layout.js';
 
+
 const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
 // ── 版本信息 ──
@@ -244,7 +245,7 @@ createApp({
         const globalSearchInput = ref(null);
 
         // 全局右键菜单
-        const globalContextMenu = reactive({ show: false, x: 0, y: 0 });
+        const globalContextMenu = reactive({ show: false, x: 0, y: 0, focusIndex: 0 });
 
         // 缩放百分比输入
         const showZoomInput = ref(false);
@@ -253,6 +254,9 @@ createApp({
         // 侧边栏收起 + 拖拽宽度
         const detailPanelCollapsed = ref(false);
         const detailPanelWidth = ref(440); // 默认宽度
+
+        // ── 编辑器焦点管理（基于 Vue 自然顺序，v-for index 即为焦点位置） ──
+        const stepListFocusIndex = ref(0);
 
         // 导入/导出子菜单
         const showFileMenu = ref(false);
@@ -292,6 +296,11 @@ createApp({
 
         // 正在缩放的节点
         const resizingNode = reactive({ active: false, nodeId: null, edge: null, startX: 0, startY: 0, startW: 0, startH: 0 });
+
+        // ── 编辑器焦点导航辅助 ──
+        const contextMenuFocusIndex = ref(-1); // 右键菜单焦点索引
+        // 更新上下文菜单项列表（由模板中 @mouseenter 更新）
+        function updateContextMenuFocus() { contextMenuFocusIndex.value = 0; }
 
         // 批量编辑
         const batchEditMode = ref(false);
@@ -1309,6 +1318,10 @@ createApp({
             document.title = '剧情树节点编辑器 — ' + (newTitle || 'Galgame');
         });
 
+        // 右键菜单打开时重置焦点
+        watch(() => contextMenu.show, (v) => { if (v) contextMenuFocusIndex.value = 0; });
+        watch(() => globalContextMenu.show, (v) => { if (v) globalContextMenu.focusIndex = 0; });
+
         onUnmounted(() => {
             window.removeEventListener('mouseup', onCanvasMouseUp);
             document.removeEventListener('contextmenu', _preventContextMenu, true);
@@ -1655,6 +1668,7 @@ createApp({
         function closeContextMenu() {
             contextMenu.show = false;
             contextMenu.nodeId = null;
+            contextMenuFocusIndex.value = -1;
         }
 
         function contextZoomToNode() {
@@ -2491,6 +2505,7 @@ createApp({
 
         function closeGlobalContextMenu() {
             globalContextMenu.show = false;
+            globalContextMenu.focusIndex = 0;
         }
 
         // ── 全局搜索 ────────────────────────────────────────────────────
@@ -3611,7 +3626,6 @@ createApp({
 
             // ── 在输入框中依然生效的快捷键 ──
             if (key === 'Escape') {
-                // 关闭各种弹出层
                 if (contextMenu.show) { closeContextMenu(); e.preventDefault(); return; }
                 if (globalContextMenu.show) { closeGlobalContextMenu(); e.preventDefault(); return; }
                 if (showGameSettings.value) { showGameSettings.value = false; e.preventDefault(); return; }
@@ -3621,10 +3635,42 @@ createApp({
                 if (showFileMenu.value) { showFileMenu.value = false; e.preventDefault(); return; }
                 if (editingGlobalSearch.value) { endGlobalSearch(); e.preventDefault(); return; }
                 if (showZoomInput.value) { showZoomInput.value = false; e.preventDefault(); return; }
-                // 取消选中（节点、连线、分组等）
                 if (selectedChapterId.value || selectedEndingId.value || selectedEdge.value || selectedGroupId.value) {
                     clearSelection();
                     e.preventDefault();
+                }
+                return;
+            }
+
+            // ── 右键菜单键盘导航 ──
+            if (contextMenu.show) {
+                e.preventDefault();
+                const items = document.querySelectorAll('.tree-context-menu .context-menu-item');
+                if (key === 'ArrowDown') {
+                    contextMenuFocusIndex.value = Math.min(contextMenuFocusIndex.value + 1, items.length - 1);
+                    items[contextMenuFocusIndex.value]?.focus();
+                } else if (key === 'ArrowUp') {
+                    contextMenuFocusIndex.value = Math.max(contextMenuFocusIndex.value - 1, 0);
+                    items[contextMenuFocusIndex.value]?.focus();
+                } else if (key === 'Enter' || key === ' ') {
+                    if (contextMenuFocusIndex.value >= 0 && items[contextMenuFocusIndex.value]) {
+                        items[contextMenuFocusIndex.value].click();
+                    }
+                }
+                return;
+            }
+            if (globalContextMenu.show) {
+                e.preventDefault();
+                const items = document.querySelectorAll('.global-context-menu .context-menu-item');
+                const gIdx = globalContextMenu.focusIndex || 0;
+                if (key === 'ArrowDown') {
+                    globalContextMenu.focusIndex = Math.min(gIdx + 1, items.length - 1);
+                    items[globalContextMenu.focusIndex]?.focus();
+                } else if (key === 'ArrowUp') {
+                    globalContextMenu.focusIndex = Math.max(gIdx - 1, 0);
+                    items[globalContextMenu.focusIndex]?.focus();
+                } else if (key === 'Enter' || key === ' ') {
+                    if (items[gIdx]) items[gIdx].click();
                 }
                 return;
             }
@@ -3806,6 +3852,21 @@ createApp({
                 }
                 // 找当前节点在 treeNodes 中的位置
                 const nodes = treeNodes.value;
+                // ── 步骤列表导航（当 detail 面板聚焦时用方向键切换步骤） ──
+                if (selectedChapterId.value && editingSteps?.length > 0) {
+                    const activeEl = document.activeElement;
+                    if (activeEl?.closest('.step-detail-panel, .step-list')) {
+                        e.preventDefault();
+                        if (key === 'ArrowDown' || key === 'ArrowRight') {
+                            const next = Math.min(editingStepIndex.value + 1, editingSteps.length - 1);
+                            if (next !== editingStepIndex.value) selectStep(next);
+                        } else {
+                            const prev = Math.max(editingStepIndex.value - 1, 0);
+                            if (prev !== editingStepIndex.value) selectStep(prev);
+                        }
+                        return;
+                    }
+                }
                 const idx = nodes.findIndex(n => n.id === selectedChapterId.value);
                 if (idx === -1) return;
                 let targetIdx = idx;
@@ -3914,6 +3975,8 @@ createApp({
             startGlobalSearch, endGlobalSearch, navigateToSearchResult,
             applyZoomPercent,
             onGlobalMouseOver, onGlobalMouseOut, startPanelResize,
+            // ── 编辑器焦点管理（基于 Vue 自然顺序） ──
+            stepListFocusIndex, contextMenuFocusIndex, updateContextMenuFocus,
             triggerResourceFile, handleResourceImagePick,
             onResourceDrop, onSpriteDrop,
             openEffectsManager, addCustomEffect, deleteCustomEffect,

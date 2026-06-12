@@ -77,15 +77,17 @@
                 <div class="game-dialog-buttons">
                     <button v-if="dialogState.type !== 'alert'"
                             class="game-dialog-btn cancel"
-                            :class="{ disabled: dialogState.cancelDisabled }"
+                            :class="{ disabled: dialogState.cancelDisabled, 'focused-btn': focus.is('dialog-buttons', 0) }"
                             :disabled="dialogState.cancelDisabled"
-                            @click="closeDialog(null)">
+                            @click="closeDialog(null)"
+                            @mouseenter="focus.to('dialog-buttons', 0)">
                         {{ dialogState.cancelText }}
                     </button>
                     <button class="game-dialog-btn confirm"
-                            :class="{ disabled: dialogState.confirmDisabled }"
+                            :class="{ disabled: dialogState.confirmDisabled, 'focused-btn': focus.is('dialog-buttons', 1) }"
                             :disabled="dialogState.confirmDisabled"
-                            @click="closeDialog(dialogState.type === 'prompt' ? dialogState.promptValue : true)">
+                            @click="closeDialog(dialogState.type === 'prompt' ? dialogState.promptValue : true)"
+                            @mouseenter="focus.to('dialog-buttons', 1)">
                         {{ dialogState.confirmText }}
                     </button>
                 </div>
@@ -111,9 +113,9 @@
                 <h1>{{ configTitle }}</h1>
                 <div class="menu-buttons">
                     <button v-for="(item, index) in menuItems" :key="index"
-                            class="btn" :class="[item.cls || '', { 'menu-focused': index === menuFocusIndex }]"
+                            class="btn" :class="[item.cls || '', focus.cls('main-menu', index, 'menu-focused')]"
                             @click="item.action"
-                            @mouseenter="menuFocusIndex = index">
+                            @mouseenter="focus.to('main-menu', index)">
                         {{ item.label }}
                     </button>
                 </div>
@@ -123,7 +125,7 @@
             <div class="sub-panel" v-if="showInfoPanel" :style="panelBackgroundStyle">
                 <div class="panel-header">
                     <h2>ℹ️ 关于</h2>
-                    <button class="close-btn" @click="closeInfoPanel">返回主视图</button>
+                    <button class="close-btn" :class="focus.cls('info-panel', 0, 'kb-focused')" @click="closeInfoPanel" @mouseenter="focus.to('info-panel', 0)">返回主视图</button>
                 </div>
                 <div class="about-container">
                     <div class="about-section">
@@ -278,9 +280,9 @@
                             <div class="expression-grid-layout">
                                 <div class="expression-chip"
                                      v-for="(sp, spIdx) in inspectedChar.sprites" :key="sp.id"
-                                     :class="[{ active: activeSpriteIdForInspection === sp.id }, { 'sprite-focused': spIdx === spriteFocusIndex }]"
+                                     :class="[{ active: activeSpriteIdForInspection === sp.id }, focus.cls('character-sprites', spIdx, 'sprite-focused')]"
                                      @click="switchInspectedSprite(sp.id)"
-                                     @mouseenter="spriteFocusIndex = spIdx">
+                                     @mouseenter="focus.to('character-sprites', spIdx)">
                                     {{ sp.label }}
                                 </div>
                             </div>
@@ -298,9 +300,9 @@
 
                 <div class="gallery-grid">
                     <div class="gallery-item" v-for="(cg, id, idx) in assetsCgLibrary" :key="id"
-                         :class="{ 'gallery-focused': idx === galleryFocusIndex }"
+                         :class="focus.cls('gallery-grid', idx, 'gallery-focused')"
                          @click="clickGalleryItem(id)"
-                         @mouseenter="galleryFocusIndex = idx">
+                         @mouseenter="focus.to('gallery-grid', idx)">
                         <div v-if="unlockedGalleries[id]" style="width:100%; height:100%;">
                             <img :src="cg.url">
                             <div class="lyric-gallery-label">
@@ -318,8 +320,8 @@
                     <div class="ending-matrix-grid">
                         <div class="ending-card-badge"
                              v-for="(end, idx) in fullEndingsList" :key="end.id"
-                             :class="{ unlocked: unlockedEndings[end.id], 'gallery-card-focused': gallerySection === 'endings' && endingFocusIndex === idx }"
-                             @mouseenter="gallerySection = 'endings'; endingFocusIndex = idx">
+                             :class="{ unlocked: unlockedEndings[end.id], 'gallery-card-focused': focus.is('endings-grid', idx) }"
+                             @mouseenter="gallerySection = 'endings'; focus.to('endings-grid', idx)">
                             <div class="ending-badge-status">
                                 {{ unlockedEndings[end.id] ? "✨ UNLOCKED" : "🔒 LOCKED" }}
                             </div>
@@ -339,8 +341,8 @@
                     <div class="ending-matrix-grid">
                         <div class="ending-card-badge"
                              v-for="(desc, cid, idx) in chapterDescriptions" :key="cid"
-                             :class="{ unlocked: visitedChapters[cid], 'gallery-card-focused': gallerySection === 'chapters' && chapterFocusIndex === idx }"
-                             @mouseenter="gallerySection = 'chapters'; chapterFocusIndex = idx">
+                             :class="{ unlocked: visitedChapters[cid], 'gallery-card-focused': focus.is('chapters-grid', idx) }"
+                             @mouseenter="gallerySection = 'chapters'; focus.to('chapters-grid', idx)">
                             <div class="ending-badge-status">
                                 {{ visitedChapters[cid] ? "✅ 已探索" : "🔒 未抵达" }}
                             </div>
@@ -384,8 +386,8 @@
                 </div>
                 <div class="save-matrix-grid">
                     <div class="save-slot-card" v-for="slotId in 16" :key="slotId"
-                         :class="{ 'slot-focused': slotFocusIndex === slotId - 1 }"
-                         @mouseenter="slotFocusIndex = slotId - 1">
+                         :class="focus.cls('archive-slots-menu', slotId - 1, 'slot-focused')"
+                         @mouseenter="focus.to('archive-slots-menu', slotId - 1)">
                         <div class="slot-header-bar" :class="{'has-data': saveSlotsData[slotId]}">
                             <span>SLOT {{ String(slotId).padStart(2, '0') }}</span>
                             <span>{{ saveSlotsData[slotId] ? 'DATA EXIST' : 'EMPTY' }}</span>
@@ -427,14 +429,19 @@
                 <div class="game-top-dock-bar" @click.stop v-show="uiVisible">
                     <div class="dock-left-group">
                         <button class="dock-action-btn exit-btn" @click="safelyExitToMenu"
-                                :class="{ 'esc-holding': escHolding }">
+                                :class="[{ 'esc-holding': escHolding }, focus.cls('game-dock', 0, 'kb-focused')]"
+                                @mouseenter="focus.to('game-dock', 0)">
                             <span class="esc-exit-fill" :style="{ width: escHoldProgress + '%' }"></span>
                             <span class="esc-exit-text">🚪 退出暂存</span>
                         </button>
                     </div>
                     <div class="dock-right-group">
-                        <button class="dock-action-btn" @click="openArchiveSlotsPanel('save')">💾 存入节点</button>
-                        <button class="dock-action-btn" @click="openArchiveSlotsPanel('load')">📂 读取节点</button>
+                        <button class="dock-action-btn" @click="openArchiveSlotsPanel('save')"
+                                :class="focus.cls('game-dock', 1, 'kb-focused')"
+                                @mouseenter="focus.to('game-dock', 1)">💾 存入节点</button>
+                        <button class="dock-action-btn" @click="openArchiveSlotsPanel('load')"
+                                :class="focus.cls('game-dock', 2, 'kb-focused')"
+                                @mouseenter="focus.to('game-dock', 2)">📂 读取节点</button>
                     </div>
                 </div>
 
@@ -458,8 +465,8 @@
 
                 <!-- 浮动控制栏 -->
                 <div class="stage-floating-control-rack" v-show="uiVisible" @click.stop>
-                    <button class="rack-glass-btn" @click="showLog = true" title="历史剧情回放">📋</button>
-                    <button class="rack-glass-btn" @click="openInventoryPanel" title="随身背包物资">🎒</button>
+                    <button class="rack-glass-btn" :class="focus.cls('game-floating', 0, 'kb-focused')" @click="showLog = true" title="历史剧情回放" @mouseenter="focus.to('game-floating', 0)">📋</button>
+                    <button class="rack-glass-btn" :class="focus.cls('game-floating', 1, 'kb-focused')" @click="openInventoryPanel" title="随身背包物资" @mouseenter="focus.to('game-floating', 1)">🎒</button>
                 </div>
 
                 <!-- 物品展示 Toast -->
@@ -501,12 +508,12 @@
                     <div v-for="(choice, index) in availableChoices" :key="index"
                          class="choice-item"
                          :class="{
-                             'choice-highlighted': index === highlightedChoiceIndex,
-                             'choice-holding': choiceHolding && index === highlightedChoiceIndex
+                             'choice-highlighted': focus.is('choices', index),
+                             'choice-holding': choiceHolding && focus.is('choices', index)
                          }"
                          @click.stop="selectChoice(choice)"
-                         @mouseenter="highlightedChoiceIndex = index">
-                        <span class="choice-hold-fill" v-if="choiceHolding && index === highlightedChoiceIndex"
+                         @mouseenter="focus.to('choices', index)">
+                        <span class="choice-hold-fill" v-if="choiceHolding && focus.is('choices', index)"
                               :style="{ width: choiceHoldProgress + '%' }"></span>
                         <span class="choice-hold-text">{{ choice.text }}</span>
                     </div>
@@ -597,8 +604,8 @@
 
                     <div class="save-matrix-grid">
                         <div class="save-slot-card" v-for="slotId in 16" :key="slotId"
-                             :class="{ 'slot-focused': gamePanelSlotFocus === slotId - 1 }"
-                             @mouseenter="gamePanelSlotFocus = slotId - 1">
+                             :class="focus.cls('archive-slots-game', slotId - 1, 'slot-focused')"
+                             @mouseenter="focus.to('archive-slots-game', slotId - 1)">
                             <div class="slot-header-bar" :class="{'has-data': saveSlotsData[slotId]}">
                                 <span>SLOT {{ String(slotId).padStart(2, '0') }}</span>
                                 <span>{{ saveSlotsData[slotId] ? 'DATA EXIST' : 'EMPTY' }}</span>
@@ -633,11 +640,7 @@
                 <div class="ending-screen" v-if="triggeredEnding">
                     <div class="ending-title">{{ triggeredEnding.title }}</div>
                     <div class="ending-desc">{{ triggeredEnding.description }}</div>
-                    <button class="return-main-btn" @click="exitToMenu"
-                            :class="{ 'ending-holding': endingHolding }">
-                        <span class="ending-hold-fill" :style="{ width: endingHoldProgress + '%' }"></span>
-                        <span class="ending-hold-text">确认并返回主菜单</span>
-                    </button>
+                    <button class="return-main-btn" @click="exitToMenu">确认并返回主菜单</button>
                 </div>
 
             </div>
