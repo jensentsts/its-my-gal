@@ -98,7 +98,6 @@
                 <button class="tb-icon-btn tb-icon-preview" data-tooltip="剧情预览（同步并打开游戏页面）" @click="previewStory">▶️</button>
                 <button class="tb-icon-btn tb-icon-config" data-tooltip="游戏全局设置" @click="openGameSettings">⚙️</button>
                 <button class="tb-icon-btn tb-icon-resource" data-tooltip="资源管理" @click="openResourceManager">📦</button>
-                <button class="tb-icon-btn" data-tooltip="特效管理" @click="openEffectsManager">✨</button>
                 <button class="tb-icon-btn tb-icon-warn" data-tooltip="还原原始数据" @click="resetAll">⚠️</button>
                 <a href="../index.html" class="tb-icon-btn" data-tooltip="返回游戏">🎮</a>
             </div>
@@ -1165,6 +1164,10 @@
                              @click="resourceTab = 'items'; selectedResourceId = null">🎒 物品</div>
                         <div class="resource-tab" :class="{ active: resourceTab === 'endings' }"
                              @click="resourceTab = 'endings'; selectedResourceId = null">🎬 结局</div>
+                        <div class="resource-tab" :class="{ active: resourceTab === 'charEffects' }"
+                             @click="resourceTab = 'charEffects'; selectedResourceId = null">🎭 角色变更</div>
+                        <div class="resource-tab" :class="{ active: resourceTab === 'effects' }"
+                             @click="resourceTab = 'effects'; selectedResourceId = null">✨ 特效</div>
                     </div>
 
                     <!-- 内容区域 -->
@@ -1173,16 +1176,16 @@
                             <!-- 左侧列表 -->
                             <div class="resource-list-panel">
                                 <div class="resource-list-header">
-                                    <button class="tb-btn tb-sm" @click="addResource(resourceTab)">➕ 添加</button>
+                                    <button class="tb-btn tb-sm" @click="addResource(resourceTab)" v-if="resourceTab !== 'charEffects'">➕ 添加</button>
                                 </div>
                                 <div class="resource-list-items">
                                     <div v-for="item in resourceList" :key="item.id || item._idx"
                                          class="resource-list-item"
                                          :class="{ active: selectedResourceId === item.id }"
                                          @click="selectResource(resourceTab, item.id)">
-                                        <span class="resource-item-icon">{{ resourceMeta[resourceTab].icon }}</span>
+                                        <span class="resource-item-icon">{{ item.icon || resourceMeta[resourceTab].icon }}</span>
                                         <span class="resource-item-name">{{ item.name || item.title || item.id }}</span>
-                                        <span class="resource-item-id">{{ item.id }}</span>
+                                        <span class="resource-item-id">{{ item._isBuiltin ? '内置' : item.id }}</span>
                                     </div>
                                     <div class="resource-list-empty" v-if="resourceList.length === 0">
                                         暂无数据，点击"添加"创建
@@ -1190,8 +1193,8 @@
                                 </div>
                             </div>
 
-                            <!-- 右侧编辑器 -->
-                            <div class="resource-editor" v-if="selectedResource">
+                            <!-- 右侧编辑器（effects/charEffects tab 也允许显示内置资源信息） -->
+                            <div class="resource-editor" v-if="selectedResource || ((resourceTab === 'effects' || resourceTab === 'charEffects') && selectedResourceId)">
                                 <!-- === 角色编辑器 === -->
                                 <template v-if="resourceTab === 'characters'">
                                     <div class="section-label">👤 角色属性</div>
@@ -1418,6 +1421,404 @@
                                     <div class="form-row">
                                         <label>描述</label>
                                         <textarea v-model="selectedResource.description" rows="4"></textarea>
+                                    </div>
+                                </template>
+
+                                <!-- === 角色变更编辑器 === -->
+                                <template v-if="resourceTab === 'charEffects'">
+                                    <div class="section-label">🎭 角色变更预览</div>
+                                    <div class="effect-preview-box" :ref="el => charEffectPreviewRef = el">
+                                        <div class="effect-preview-bg">
+                                            <span v-if="!charEffectPreviewActive">调整下方参数后点击「预览」查看效果</span>
+                                        </div>
+                                    </div>
+                                    <button class="tb-btn tb-sm" @click="toggleCharEffectPreview(selectedResourceId)" style="margin-bottom:12px">
+                                        {{ charEffectPreviewActive ? '⏹ 停止预览' : '▶ 预览角色变更' }}
+                                    </button>
+
+                                    <div class="section-label">⚙️ 变更参数</div>
+                                    <div class="form-row">
+                                        <label>动作类型</label>
+                                        <input type="text" :value="selectedResource.action" disabled style="font-family:monospace;font-size:12px" />
+                                    </div>
+
+                                    <!-- ═══ enter ═══ -->
+                                    <template v-if="selectedResource.action === 'enter'">
+                                        <div class="form-row"><label>入场动画</label>
+                                            <select v-model="selectedResource.animation">
+                                                <option v-for="a in ANIM_ENTER" :key="a" :value="a">{{ a }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-row"><label>目标位置</label>
+                                            <select v-model="selectedResource.position">
+                                                <option v-for="p in POSITIONS" :key="p" :value="p">{{ p }}</option>
+                                            </select>
+                                        </div>
+                                    </template>
+
+                                    <!-- ═══ leave ═══ -->
+                                    <template v-if="selectedResource.action === 'leave'">
+                                        <div class="form-row"><label>退场动画</label>
+                                            <select v-model="selectedResource.animation">
+                                                <option v-for="a in ANIM_LEAVE" :key="a" :value="a">{{ a }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-row"><label>持续时长</label>
+                                            <select v-model="selectedResource.duration">
+                                                <option v-for="d in [0.3,0.5,0.6,0.8,1.0]" :key="d" :value="d">{{ d }}s</option>
+                                            </select>
+                                        </div>
+                                    </template>
+
+                                    <!-- ═══ update ═══ -->
+                                    <template v-if="selectedResource.action === 'update'">
+                                        <div class="form-row"><label>立绘 ID</label>
+                                            <input type="text" v-model="selectedResource.spriteId" placeholder="默认（default立绘）" />
+                                        </div>
+                                        <div class="form-row"><label>动画</label>
+                                            <select v-model="selectedResource.animation">
+                                                <option value="">默认（无动画）</option>
+                                                <option v-for="a in ANIM_ENTER" :key="a" :value="a">{{ a }}</option>
+                                                <option v-for="a in ANIM_MOVE" :key="a" :value="a">{{ a }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-row"><label>位置</label>
+                                            <select v-model="selectedResource.position">
+                                                <option v-for="p in POSITIONS" :key="p" :value="p">{{ p }}</option>
+                                            </select>
+                                        </div>
+                                    </template>
+
+                                    <!-- ═══ move ═══ -->
+                                    <template v-if="selectedResource.action === 'move'">
+                                        <div class="form-row"><label>目标位置</label>
+                                            <select v-model="selectedResource.position">
+                                                <option v-for="p in POSITIONS" :key="p" :value="p">{{ p }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-row"><label>移动动画</label>
+                                            <select v-model="selectedResource.animation">
+                                                <option v-for="a in ANIM_MOVE" :key="a" :value="a">{{ a }}</option>
+                                            </select>
+                                        </div>
+                                    </template>
+
+                                    <!-- ═══ speak ═══ -->
+                                    <template v-if="selectedResource.action === 'speak'">
+                                        <div class="form-row"><label>音量权重</label>
+                                            <input type="range" min="0" max="1" step="0.1" v-model.number="selectedResource.weight" style="flex:1" />
+                                            <span class="ce-range-val">{{ selectedResource.weight != null ? selectedResource.weight.toFixed(1) : '0.8' }}</span>
+                                        </div>
+                                        <div class="form-row"><label>动画</label>
+                                            <select v-model="selectedResource.animation">
+                                                <option value="">默认（无动画）</option>
+                                                <option v-for="a in ANIM_ENTER" :key="a" :value="a">{{ a }}</option>
+                                            </select>
+                                        </div>
+                                    </template>
+
+                                    <!-- ═══ silence ═══ -->
+                                    <template v-if="selectedResource.action === 'silence'">
+                                        <div class="settings-note">让该角色停止说话，无需配置参数。</div>
+                                    </template>
+
+                                    <!-- ═══ speakAll ═══ -->
+                                    <template v-if="selectedResource.action === 'speakAll'">
+                                        <div class="form-row"><label>动画</label>
+                                            <select v-model="selectedResource.animation">
+                                                <option value="">默认（无动画）</option>
+                                                <option v-for="a in ANIM_ENTER" :key="a" :value="a">{{ a }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="settings-note">所有指定角色开始说话，角色 ID 在实际使用时按逗号分隔填入。</div>
+                                    </template>
+
+                                    <!-- ═══ silenceAll ═══ -->
+                                    <template v-if="selectedResource.action === 'silenceAll'">
+                                        <div class="settings-note">停止所有角色的说话状态，无需配置参数。</div>
+                                    </template>
+
+                                    <!-- ═══ action ═══ -->
+                                    <template v-if="selectedResource.action === 'action'">
+                                        <div class="form-row"><label>角色动作</label>
+                                            <select v-model="selectedResource.actionId">
+                                                <option v-for="a in ACTIONS" :key="a" :value="a">{{ a }}</option>
+                                            </select>
+                                        </div>
+                                    </template>
+
+                                    <!-- ═══ effect ═══ -->
+                                    <template v-if="selectedResource.action === 'effect'">
+                                        <div class="form-row"><label>角色特效</label>
+                                            <select v-model="selectedResource.effect">
+                                                <option v-for="e in FX_CHAR" :key="e" :value="e">{{ e }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-row"><label>持续时长</label>
+                                            <select v-model="selectedResource.duration">
+                                                <option :value="0">0（循环）</option>
+                                                <option :value="0.3">0.3s</option>
+                                                <option :value="0.5">0.5s</option>
+                                                <option :value="0.8">0.8s</option>
+                                                <option :value="1.0">1.0s</option>
+                                            </select>
+                                        </div>
+                                    </template>
+
+                                    <!-- ═══ filter ═══ -->
+                                    <template v-if="selectedResource.action === 'filter'">
+                                        <div class="form-row"><label>亮度</label>
+                                            <input type="range" min="0" max="2" step="0.05" v-model.number="selectedResource.filters.brightness" style="flex:1" />
+                                            <span class="ce-range-val">{{ selectedResource.filters?.brightness?.toFixed(2) || '1.00' }}</span>
+                                        </div>
+                                        <div class="form-row"><label>饱和度</label>
+                                            <input type="range" min="0" max="2" step="0.05" v-model.number="selectedResource.filters.saturation" style="flex:1" />
+                                            <span class="ce-range-val">{{ selectedResource.filters?.saturation?.toFixed(2) || '1.00' }}</span>
+                                        </div>
+                                        <div class="form-row"><label>对比度</label>
+                                            <input type="range" min="0" max="2" step="0.05" v-model.number="selectedResource.filters.contrast" style="flex:1" />
+                                            <span class="ce-range-val">{{ selectedResource.filters?.contrast?.toFixed(2) || '1.00' }}</span>
+                                        </div>
+                                    </template>
+
+                                    <!-- ═══ resetFilter ═══ -->
+                                    <template v-if="selectedResource.action === 'resetFilter'">
+                                        <div class="settings-note">重置该角色的颜色滤镜到默认值，无需配置参数。</div>
+                                    </template>
+
+                                    <!-- ═══ scale ═══ -->
+                                    <template v-if="selectedResource.action === 'scale'">
+                                        <div class="form-row"><label>缩放比例</label>
+                                            <select v-model="selectedResource.scale">
+                                                <option v-for="s in [0.5,0.7,1.0,1.3,1.5,2.0]" :key="s" :value="s">{{ s }}×</option>
+                                            </select>
+                                        </div>
+                                    </template>
+
+                                    <!-- ═══ opacity ═══ -->
+                                    <template v-if="selectedResource.action === 'opacity'">
+                                        <div class="form-row"><label>透明度值</label>
+                                            <select v-model="selectedResource.opacity">
+                                                <option v-for="o in [0.1,0.25,0.5,0.75,0.9]" :key="o" :value="o">{{ o }}</option>
+                                            </select>
+                                        </div>
+                                    </template>
+
+                                    <!-- ═══ swap ═══ -->
+                                    <template v-if="selectedResource.action === 'swap'">
+                                        <div class="settings-note">交换两个角色的位置（id1 ↔ id2），实际使用时指定两位角色。</div>
+                                    </template>
+
+                                    <!-- ═══ gather ═══ -->
+                                    <template v-if="selectedResource.action === 'gather'">
+                                        <div class="form-row"><label>间距</label>
+                                            <input type="number" v-model.number="selectedResource.spread" step="0.01" min="0.01" max="0.5" placeholder="0.15" />
+                                        </div>
+                                        <div class="form-row"><label>目标位置</label>
+                                            <select v-model="selectedResource.position">
+                                                <option v-for="p in POSITIONS" :key="p" :value="p">{{ p }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-row"><label>动画</label>
+                                            <select v-model="selectedResource.animation">
+                                                <option value="">默认</option>
+                                                <option v-for="a in ANIM_ENTER" :key="a" :value="a">{{ a }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="settings-note">让多位角色聚集到目标位置，角色 ID 在实际使用时以逗号分隔填入。</div>
+                                    </template>
+
+                                    <!-- ═══ scatter ═══ -->
+                                    <template v-if="selectedResource.action === 'scatter'">
+                                        <div class="form-row"><label>动画</label>
+                                            <select v-model="selectedResource.animation">
+                                                <option value="">默认</option>
+                                                <option v-for="a in ANIM_LEAVE" :key="a" :value="a">{{ a }}</option>
+                                                <option value="shake">shake</option>
+                                            </select>
+                                        </div>
+                                        <div class="settings-note">让多位角色从当前位置散开。</div>
+                                    </template>
+
+                                    <!-- ═══ order ═══ -->
+                                    <template v-if="selectedResource.action === 'order'">
+                                        <div class="settings-note">按指定顺序重新排列角色层级（ids 以逗号分隔），预览将闪烁表示。</div>
+                                    </template>
+
+                                    <!-- ═══ clearAll ═══ -->
+                                    <template v-if="selectedResource.action === 'clearAll'">
+                                        <div class="form-row"><label>退场动画</label>
+                                            <select v-model="selectedResource.animation">
+                                                <option v-for="a in ANIM_LEAVE" :key="a" :value="a">{{ a }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-row"><label>持续时长</label>
+                                            <select v-model="selectedResource.duration">
+                                                <option v-for="d in [0.3,0.5,0.8,1.0]" :key="d" :value="d">{{ d }}s</option>
+                                            </select>
+                                        </div>
+                                        <div class="settings-note">清空舞台上所有角色。</div>
+                                    </template>
+
+                                    <div class="section-label">📋 说明</div>
+                                    <div class="settings-note" style="line-height:1.8">
+                                        <strong>{{ selectedResource.name || selectedResourceId }}</strong>
+                                        <span v-if="selectedResource.action === 'enter'">—— 以 <em>{{ selectedResource.animation }}</em> 入场到 <em>{{ selectedResource.position }}</em> 位置。</span>
+                                        <span v-if="selectedResource.action === 'leave'">—— 以 <em>{{ selectedResource.animation }}</em> 退场，持续 <em>{{ selectedResource.duration }}s</em>。</span>
+                                        <span v-if="selectedResource.action === 'update'">—— 更新角色立绘/动画/位置{{ selectedResource.spriteId ? ' → ' + selectedResource.spriteId : '' }}。</span>
+                                        <span v-if="selectedResource.action === 'move'">—— 移动到 <em>{{ selectedResource.position }}</em>，动画 <em>{{ selectedResource.animation }}</em>。</span>
+                                        <span v-if="selectedResource.action === 'speak'">—— 开始说话，权重 <em>{{ selectedResource.weight }}</em>{{ selectedResource.animation ? '，动画 ' + selectedResource.animation : '' }}。</span>
+                                        <span v-if="selectedResource.action === 'silence'">—— 让角色停止说话。</span>
+                                        <span v-if="selectedResource.action === 'speakAll'">—— 全员开始说话{{ selectedResource.animation ? '，动画 ' + selectedResource.animation : '' }}。</span>
+                                        <span v-if="selectedResource.action === 'silenceAll'">—— 全员停止说话。</span>
+                                        <span v-if="selectedResource.action === 'action'">—— 执行 <em>{{ selectedResource.actionId }}</em> 动作。</span>
+                                        <span v-if="selectedResource.action === 'effect'">—— 施加 <em>{{ selectedResource.effect }}</em>{{ selectedResource.duration > 0 ? '，持续 ' + selectedResource.duration + 's' : '（循环）' }}。</span>
+                                        <span v-if="selectedResource.action === 'filter'">—— 调整亮度/饱和度/对比度滤镜。</span>
+                                        <span v-if="selectedResource.action === 'resetFilter'">—— 重置颜色滤镜到默认值。</span>
+                                        <span v-if="selectedResource.action === 'scale'">—— 缩放至 <em>{{ selectedResource.scale }}×</em>。</span>
+                                        <span v-if="selectedResource.action === 'opacity'">—— 透明度设为 <em>{{ selectedResource.opacity }}</em>。</span>
+                                        <span v-if="selectedResource.action === 'swap'">—— 交换两个角色的位置。</span>
+                                        <span v-if="selectedResource.action === 'gather'">—— 聚集到 <em>{{ selectedResource.position }}</em>（间距 {{ selectedResource.spread }}）。</span>
+                                        <span v-if="selectedResource.action === 'scatter'">—— 散开{{ selectedResource.animation ? '（动画 ' + selectedResource.animation + '）' : '' }}。</span>
+                                        <span v-if="selectedResource.action === 'order'">—— 按顺序重排角色层级。</span>
+                                        <span v-if="selectedResource.action === 'clearAll'">—— 以 <em>{{ selectedResource.animation }}</em> 清空全部角色。</span>
+                                    </div>
+
+                                    <!-- 删除按钮（仅自定义角色变更） -->
+                                    <div v-if="customCharEffects[selectedResourceId]" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color)">
+                                        <button class="tb-btn tb-danger tb-sm" @click="deleteResource('charEffects', selectedResourceId)">🗑️ 删除此角色变更</button>
+                                    </div>
+                                </template>
+
+                                <!-- === 特效编辑器 === -->
+                                <template v-if="resourceTab === 'effects'">
+                                    <div class="section-label">✨ 特效预览与信息</div>
+                                    <div class="effect-preview-box" :ref="el => effectPreviewRef = el">
+                                        <div class="effect-preview-bg">
+                                            <span v-if="!effectPreviewActive">点击下方「预览」查看效果</span>
+                                        </div>
+                                    </div>
+                                    <button class="tb-btn tb-sm" @click="toggleEffectPreview(selectedResourceId)">
+                                        {{ effectPreviewActive ? '⏹ 停止预览' : '▶ 预览特效' }}
+                                    </button>
+
+                                    <!-- 自定义特效编辑器 -->
+                                    <template v-if="customEffects[selectedResourceId]">
+                                        <div class="section-label">⚙️ 参数编辑</div>
+                                        <div class="form-row">
+                                            <label>特效名称</label>
+                                            <input type="text" v-model="customEffects[selectedResourceId].name" />
+                                        </div>
+                                        <div class="form-row">
+                                            <label>图标 (emoji)</label>
+                                            <input type="text" v-model="customEffects[selectedResourceId].icon" />
+                                        </div>
+                                        <div class="form-row">
+                                            <label>特效类别</label>
+                                            <select v-model="customEffects[selectedResourceId].effectType">
+                                                <option value="builtin">内置特效（雨/雪/火焰等）</option>
+                                                <option value="template">模板 + Emoji 特效</option>
+                                                <option value="custom">独立 JS + CSS 特效</option>
+                                            </select>
+                                        </div>
+
+                                        <!-- 内置特效参数 -->
+                                        <template v-if="customEffects[selectedResourceId]?.effectType === 'builtin'">
+                                            <div class="form-row">
+                                                <label>内置类型</label>
+                                                <select v-model="customEffects[selectedResourceId].type">
+                                                    <option value="rain">🌧️ 雨</option>
+                                                    <option value="snow">❄️ 雪</option>
+                                                    <option value="sakura">🌸 樱花</option>
+                                                    <option value="fire">🔥 火焰</option>
+                                                    <option value="stardust">✨ 星尘</option>
+                                                    <option value="bloodmoon">🩸 血月</option>
+                                                    <option value="corruption">🌑 腐蚀</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-row">
+                                                <label>密度</label>
+                                                <input type="number" v-model.number="customEffects[selectedResourceId].density" min="1" max="100" />
+                                            </div>
+                                            <div class="form-row">
+                                                <label>速度</label>
+                                                <input type="number" v-model.number="customEffects[selectedResourceId].speed" min="1" max="200" />
+                                            </div>
+                                            <div class="settings-note">
+                                                内置特效参数说明：<br>
+                                                <strong>rain/snow/sakura</strong>: density, speed, wind, sizeMin, sizeMax<br>
+                                                <strong>fire</strong>: density, intensity, scale<br>
+                                                <strong>stardust/bloodmoon/corruption</strong>: density
+                                            </div>
+                                        </template>
+
+                                        <!-- 模板 Emoji 特效参数 -->
+                                        <template v-if="customEffects[selectedResourceId]?.effectType === 'template'">
+                                            <div class="form-row">
+                                                <label>Emoji</label>
+                                                <input type="text" v-model="customEffects[selectedResourceId].emoji" placeholder="💖" />
+                                            </div>
+                                            <div class="form-row">
+                                                <label>动画模板</label>
+                                                <select v-model="customEffects[selectedResourceId].animation">
+                                                    <option value="fall">下落 (fall)</option>
+                                                    <option value="rise">上升 (rise)</option>
+                                                    <option value="float">漂浮 (float)</option>
+                                                    <option value="explode">爆炸 (explode)</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-row">
+                                                <label>密度</label>
+                                                <input type="number" v-model.number="customEffects[selectedResourceId].density" min="1" max="100" />
+                                            </div>
+                                            <div class="form-row">
+                                                <label>速度</label>
+                                                <input type="number" v-model.number="customEffects[selectedResourceId].speed" min="1" max="200" />
+                                            </div>
+                                            <div class="form-row">
+                                                <label>最小尺寸</label>
+                                                <input type="number" v-model.number="customEffects[selectedResourceId].sizeMin" min="6" max="60" />
+                                            </div>
+                                            <div class="form-row">
+                                                <label>最大尺寸</label>
+                                                <input type="number" v-model.number="customEffects[selectedResourceId].sizeMax" min="6" max="60" />
+                                            </div>
+                                            <div class="form-row">
+                                                <label>颜色（可选）</label>
+                                                <input type="text" v-model="customEffects[selectedResourceId].color" placeholder="如 #ff69b4" />
+                                            </div>
+                                        </template>
+
+                                        <!-- 独立 JS + CSS 特效参数 -->
+                                        <template v-if="customEffects[selectedResourceId]?.effectType === 'custom'">
+                                            <div class="form-row">
+                                                <label>JS 路径</label>
+                                                <input type="text" v-model="customEffects[selectedResourceId].jsPath" placeholder="effects/my-effect/effect.js" />
+                                            </div>
+                                            <div class="form-row">
+                                                <label>CSS 路径（可选）</label>
+                                                <input type="text" v-model="customEffects[selectedResourceId].cssPath" placeholder="effects/my-effect/effect.css" />
+                                            </div>
+                                            <div class="settings-note">
+                                                JS 特效需暴露默认模块：<br>
+                                                <code>{ spawn(container, config), getInterval(config), onStart?, onStop? }</code>
+                                            </div>
+                                        </template>
+                                    </template>
+
+                                    <!-- 内置特效信息（非自定义） -->
+                                    <div class="effect-builtin-info" v-if="!customEffects[selectedResourceId]">
+                                        <div class="info-name">{{ getEffectIcon(selectedResourceId) }} {{ selectedResourceId }}</div>
+                                        <div class="info-meta">
+                                            <div>类型：内置特效</div>
+                                            <div>该特效为引擎默认提供，支持在步骤的「环境特效」中直接使用。</div>
+                                            <div>如需自定义参数，请点击左侧「➕ 添加」创建自定义特效配置。</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 删除按钮（仅自定义特效） -->
+                                    <div v-if="customEffects[selectedResourceId]" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color)">
+                                        <button class="tb-btn tb-danger tb-sm" @click="deleteResource('effects', selectedResourceId)">🗑️ 删除此特效</button>
                                     </div>
                                 </template>
 
@@ -1934,8 +2335,8 @@
                                 </div><!-- /step-editor-body -->
                             </div>
 
-                            <!-- 未选择资源 -->
-                            <div class="resource-editor resource-editor-empty" v-if="!selectedResource">
+                            <!-- 未选择资源（effects/charEffects 内置资源也视为已选择） -->
+                            <div class="resource-editor resource-editor-empty" v-if="!selectedResource && !((resourceTab === 'effects' || resourceTab === 'charEffects') && selectedResourceId)">
                                 从左侧列表选择资源以编辑
                             </div>
                         </div>
@@ -1944,166 +2345,6 @@
             </div>
         </div>
 
-        <!-- ============================================================ -->
-        <!--  特效管理弹窗                                                 -->
-        <!-- ============================================================ -->
-        <div class="modal-overlay" v-if="showEffectsManager" @click.self="showEffectsManager = false">
-            <div class="modal-content modal-effects">
-                <div class="modal-header">
-                    <h3>✨ 特效管理</h3>
-                    <button class="close-btn" @click="showEffectsManager = false">✕</button>
-                </div>
-                <div class="modal-body effects-body">
-                    <div class="effects-layout">
-                        <!-- 左侧特效列表 -->
-                        <div class="effects-list-panel">
-                            <div class="resource-list-header">
-                                <button class="tb-btn tb-sm" @click="addCustomEffect">➕ 自定义特效</button>
-                            </div>
-                            <div class="resource-list-items">
-                                <div v-for="(ef, eid) in customEffects" :key="eid"
-                                     class="resource-list-item" :class="{ active: selectedEffectId === eid }"
-                                     @click="selectedEffectId = eid">
-                                    <span class="resource-item-icon">{{ ef.icon || '✨' }}</span>
-                                    <span class="resource-item-name">{{ ef.name || eid }}</span>
-                                    <span class="resource-item-id">{{ eid }}</span>
-                                </div>
-                                <div class="resource-list-empty" v-if="Object.keys(customEffects).length === 0">
-                                    暂无自定义特效
-                                </div>
-                                <div class="section-label" style="margin:8px 12px">内置特效</div>
-                                <div v-for="name in builtinEffects" :key="name"
-                                     class="resource-list-item" :class="{ active: selectedEffectId === name && !customEffects[name] }"
-                                     @click="selectedEffectId = name">
-                                    <span class="resource-item-icon">{{ getEffectIcon(name) }}</span>
-                                    <span class="resource-item-name">{{ name }}</span>
-                                    <span class="resource-item-id">内置</span>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- 右侧特效编辑/预览 -->
-                        <div class="effects-editor" v-if="selectedEffectId">
-                            <div class="section-label">🎬 预览</div>
-                            <div class="effect-preview-box" :ref="el => effectPreviewRef = el">
-                                <div class="effect-preview-bg">
-                                    <span v-if="!effectPreviewActive">点击下方「预览」查看效果</span>
-                                </div>
-                            </div>
-                            <button class="tb-btn tb-sm" @click="toggleEffectPreview(selectedEffectId)">
-                                {{ effectPreviewActive ? '⏹ 停止预览' : '▶ 预览特效' }}
-                            </button>
-                            <div class="section-label">⚙️ 参数</div>
-                            <div class="form-row" v-if="customEffects[selectedEffectId]">
-                                <label>特效名称</label>
-                                <input type="text" v-model="customEffects[selectedEffectId].name" />
-                            </div>
-                            <div class="form-row" v-if="customEffects[selectedEffectId]">
-                                <label>图标 (emoji)</label>
-                                <input type="text" v-model="customEffects[selectedEffectId].icon" />
-                            </div>
-                            <div class="form-row" v-if="customEffects[selectedEffectId]">
-                                <label>特效类别</label>
-                                <select v-model="customEffects[selectedEffectId].effectType">
-                                    <option value="builtin">内置特效（雨/雪/火焰等）</option>
-                                    <option value="template">模板 + Emoji 特效</option>
-                                    <option value="custom">独立 JS + CSS 特效</option>
-                                </select>
-                            </div>
-
-                            <!-- 内置特效参数 -->
-                            <template v-if="customEffects[selectedEffectId]?.effectType === 'builtin'">
-                                <div class="form-row">
-                                    <label>内置类型</label>
-                                    <select v-model="customEffects[selectedEffectId].type">
-                                        <option value="rain">🌧️ 雨</option>
-                                        <option value="snow">❄️ 雪</option>
-                                        <option value="sakura">🌸 樱花</option>
-                                        <option value="fire">🔥 火焰</option>
-                                        <option value="stardust">✨ 星尘</option>
-                                        <option value="bloodmoon">🩸 血月</option>
-                                        <option value="corruption">🌑 腐蚀</option>
-                                    </select>
-                                </div>
-                                <div class="form-row">
-                                    <label>密度</label>
-                                    <input type="number" v-model.number="customEffects[selectedEffectId].density" min="1" max="100" />
-                                </div>
-                                <div class="form-row">
-                                    <label>速度</label>
-                                    <input type="number" v-model.number="customEffects[selectedEffectId].speed" min="1" max="200" />
-                                </div>
-                                <div class="settings-note">
-                                    内置特效参数说明：<br>
-                                    <strong>rain/snow/sakura</strong>: density, speed, wind, sizeMin, sizeMax<br>
-                                    <strong>fire</strong>: density, intensity, scale<br>
-                                    <strong>stardust/bloodmoon/corruption</strong>: density
-                                </div>
-                            </template>
-
-                            <!-- 模板 Emoji 特效参数 -->
-                            <template v-if="customEffects[selectedEffectId]?.effectType === 'template'">
-                                <div class="form-row">
-                                    <label>Emoji</label>
-                                    <input type="text" v-model="customEffects[selectedEffectId].emoji" placeholder="💖" />
-                                </div>
-                                <div class="form-row">
-                                    <label>动画模板</label>
-                                    <select v-model="customEffects[selectedEffectId].animation">
-                                        <option value="fall">下落 (fall)</option>
-                                        <option value="rise">上升 (rise)</option>
-                                        <option value="float">漂浮 (float)</option>
-                                        <option value="explode">爆炸 (explode)</option>
-                                    </select>
-                                </div>
-                                <div class="form-row">
-                                    <label>密度</label>
-                                    <input type="number" v-model.number="customEffects[selectedEffectId].density" min="1" max="100" />
-                                </div>
-                                <div class="form-row">
-                                    <label>速度</label>
-                                    <input type="number" v-model.number="customEffects[selectedEffectId].speed" min="1" max="200" />
-                                </div>
-                                <div class="form-row">
-                                    <label>最小尺寸</label>
-                                    <input type="number" v-model.number="customEffects[selectedEffectId].sizeMin" min="6" max="60" />
-                                </div>
-                                <div class="form-row">
-                                    <label>最大尺寸</label>
-                                    <input type="number" v-model.number="customEffects[selectedEffectId].sizeMax" min="6" max="60" />
-                                </div>
-                                <div class="form-row">
-                                    <label>颜色（可选）</label>
-                                    <input type="text" v-model="customEffects[selectedEffectId].color" placeholder="如 #ff69b4" />
-                                </div>
-                            </template>
-
-                            <!-- 独立 JS + CSS 特效参数 -->
-                            <template v-if="customEffects[selectedEffectId]?.effectType === 'custom'">
-                                <div class="form-row">
-                                    <label>JS 路径</label>
-                                    <input type="text" v-model="customEffects[selectedEffectId].jsPath" placeholder="effects/my-effect/effect.js" />
-                                </div>
-                                <div class="form-row">
-                                    <label>CSS 路径（可选）</label>
-                                    <input type="text" v-model="customEffects[selectedEffectId].cssPath" placeholder="effects/my-effect/effect.css" />
-                                </div>
-                                <div class="settings-note">
-                                    JS 特效需暴露默认模块：<br>
-                                    <code>{ spawn(container, config), getInterval(config), onStart?, onStop? }</code>
-                                </div>
-                            </template>
-
-                            <div v-if="customEffects[selectedEffectId]" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color)">
-                                <button class="tb-btn tb-danger tb-sm" @click="deleteCustomEffect(selectedEffectId)">🗑️ 删除此特效</button>
-                            </div>
-                        </div>
-                        <div class="resource-editor-empty" v-if="!selectedEffectId">
-                            从左侧选择特效以编辑或预览
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
     </div>
 

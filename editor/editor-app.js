@@ -307,25 +307,75 @@ createApp({
 
         // 批量编辑
         const batchEditMode = ref(false);
-        const showEffectsManager = ref(false);
         const customEffects = reactive({}); // { effectId: { name, icon, type, density, speed, ... } }
-        const selectedEffectId = ref(null);
         const effectPreviewRef = ref(null);
         const effectPreviewActive = ref(false);
         let effectPreviewTimer = null;
         const builtinEffects = ['rain', 'snow', 'sakura', 'fire', 'stardust', 'bloodmoon', 'corruption'];
+
+        // ── 角色变更（Character Effects）─────────────────────────────────
+        const customCharEffects = reactive({}); // 预留自定义角色变更
+        const charEffectPreviewRef = ref(null);
+        const charEffectPreviewActive = ref(false);
+        let charEffectPreviewTimer = null;
+
+        /** 角色变更可选参数常量 */
+        const ANIM_ENTER = ['fade-in','slide-in-left','slide-in-right','slide-in-up','slide-in-down','bounce-in','zoom-in','flip-in','drop-in','float-in','stumble-in','swing-in'];
+        const ANIM_LEAVE = ['fade-out','slide-out-left','slide-out-right','slide-out-up','slide-out-down','bounce-out','zoom-out','flip-out','shrink-out','vanish'];
+        const ANIM_MOVE  = ['slide-left','slide-right','flip-move'];
+        const POSITIONS  = ['center','left','right','left-far','center-left','center-right','right-far'];
+        const FX_CHAR    = ['shake','flash','glow','float','pulse','tremble','blur','highlight','shine','dizzy'];
+        const ACTIONS    = ['wave','bow','point','nod','shake-head','sit','stand','jump','fall','turn'];
+
+        /** 内置角色变更动作类型（左边列表） */
+        const EFFECT_DURS = [0, 0.3, 0.5, 0.8, 1.0];
+        const builtinCharEffects = {
+            'char-enter':       { name:'入场',     icon:'🎭', action:'enter',       animation:'fade-in',        position:'center' },
+            'char-leave':       { name:'退场',     icon:'🚪', action:'leave',       animation:'fade-out',       duration:0.5 },
+            'char-update':      { name:'更新',     icon:'🔄', action:'update',      animation:'',               position:'center', spriteId:'' },
+            'char-move':        { name:'移动',     icon:'🚶', action:'move',        animation:'slide-left',     position:'left' },
+            'char-speak':       { name:'说话',     icon:'💬', action:'speak',       weight:0.8,                 animation:'' },
+            'char-silence':     { name:'沉默',     icon:'🔇', action:'silence' },
+            'char-speakAll':    { name:'全员说',   icon:'🗣️', action:'speakAll',    animation:'' },
+            'char-silenceAll':  { name:'全沉默',   icon:'🤫', action:'silenceAll' },
+            'char-action':      { name:'动作',     icon:'💃', action:'action',      actionId:'wave' },
+            'char-effect':      { name:'特效',     icon:'💫', action:'effect',      effect:'shake',             duration:0.5 },
+            'char-filter':      { name:'滤镜',     icon:'🎨', action:'filter',      filters:{ brightness:1.0, saturation:1.0, contrast:1.0 } },
+            'char-resetFilter': { name:'清滤镜',   icon:'🧹', action:'resetFilter' },
+            'char-scale':       { name:'缩放',     icon:'🔍', action:'scale',       scale:1.3 },
+            'char-opacity':     { name:'透明度',   icon:'👻', action:'opacity',     opacity:0.5 },
+            'char-swap':        { name:'交换',     icon:'🔄', action:'swap' },
+            'char-gather':      { name:'聚集',     icon:'📦', action:'gather',      spread:0.15,                position:'center', animation:'' },
+            'char-scatter':     { name:'散开',     icon:'💥', action:'scatter',     animation:'' },
+            'char-order':       { name:'排序',     icon:'📋', action:'order' },
+            'char-clearAll':    { name:'全清',     icon:'🗑️', action:'clearAll',    animation:'fade-out',       duration:0.5 },
+        };
+
+        /** 当前编辑中的角色变更参数（克隆自内置预设，在右边面板可修改） */
+        const editingCharEffect = reactive({});
+
+        // 选中角色变更动作类型 → 复制为可编辑副本
+        watch([() => resourceTab.value, () => selectedResourceId.value], ([tab, id]) => {
+            if (tab !== 'charEffects' || !id) return;
+            const src = builtinCharEffects[id] || customCharEffects[id];
+            if (!src) return;
+            for (const key of Object.keys(editingCharEffect)) delete editingCharEffect[key];
+            Object.assign(editingCharEffect, clone(src));
+        });
 
         // 章节重命名 ID 暂存（提供 _renameId 给模板）
         const chapterRenameIds = reactive({});
 
         // 资源类型元数据
         const resourceMeta = {
-            chapters: { label: '章节', icon: '📜', data: chapters, isObject: true, isChapter: true },
-            characters: { label: '角色', icon: '👤', data: gameCharacters, isObject: true },
-            scenes: { label: '场景', icon: '🏞️', data: gameScenes, isObject: true },
-            cg: { label: 'CG 图鉴', icon: '🖼️', data: gameCgLibrary, isObject: true },
-            items: { label: '物品', icon: '🎒', data: gameItems, isObject: true },
-            endings: { label: '结局', icon: '🎬', data: gameEndings, isObject: false },
+            chapters:    { label: '章节',     icon: '📜', data: chapters,          isObject: true,  isChapter: true },
+            characters:  { label: '角色',     icon: '👤', data: gameCharacters,     isObject: true },
+            scenes:      { label: '场景',     icon: '🏞️', data: gameScenes,         isObject: true },
+            cg:          { label: 'CG 图鉴',  icon: '🖼️', data: gameCgLibrary,      isObject: true },
+            items:       { label: '物品',     icon: '🎒', data: gameItems,          isObject: true },
+            endings:     { label: '结局',     icon: '🎬', data: gameEndings,        isObject: false },
+            charEffects: { label: '角色变更', icon: '🎭', data: customCharEffects,   isObject: true,  isCharEffects: true },
+            effects:     { label: '特效',     icon: '✨', data: customEffects,       isObject: true,  isEffects: true },
         };
 
         // 在 resourceMeta 之后、resourceList 之前添加
@@ -696,6 +746,36 @@ createApp({
                         title: id,
                     }));
                 }
+                // 特效：合并自定义 + 内置
+                if (meta.isEffects) {
+                    const items = Object.entries(data).map(([id, item]) => ({
+                        id, name: item.name || id,
+                        icon: item.icon || '✨',
+                        _isCustom: true,
+                    }));
+                    // 追加内置特效（不在自定义中的）
+                    for (const name of builtinEffects) {
+                        if (!data[name]) {
+                            items.push({ id: name, name, icon: getEffectIcon(name), _isBuiltin: true });
+                        }
+                    }
+                    return items;
+                }
+                // 角色变更：合并自定义 + 内置
+                if (meta.isCharEffects) {
+                    const items = Object.entries(data).map(([id, item]) => ({
+                        id, name: item.name || id,
+                        icon: item.icon || '🎭',
+                        _isCustom: true,
+                    }));
+                    // 追加内置角色变更（不在自定义中的）
+                    for (const [bid, preset] of Object.entries(builtinCharEffects)) {
+                        if (!data[bid]) {
+                            items.push({ id: bid, name: preset.name, icon: preset.icon || '🎭', _isBuiltin: true });
+                        }
+                    }
+                    return items;
+                }
                 return Object.entries(data).map(([id, item]) => ({ id, ...item }));
             }
             // endings 是数组
@@ -715,6 +795,14 @@ createApp({
                         _steps: steps || [],
                         _renameId: chapterRenameIds[selectedResourceId.value] || '',
                     };
+                }
+                // 角色变更：返回可编辑副本
+                if (meta.isCharEffects) {
+                    return editingCharEffect.action ? editingCharEffect : (
+                        builtinCharEffects[selectedResourceId.value]
+                        || meta.data[selectedResourceId.value]
+                        || null
+                    );
                 }
                 return meta.data[selectedResourceId.value] || null;
             }
@@ -1928,6 +2016,11 @@ createApp({
         function addResource(type) {
             const meta = resourceMeta[type];
             if (!meta) return;
+            // 角色变更：暂时不做新增
+            if (meta.isCharEffects) {
+                showToast('⚠ 角色变更暂不支持自定义新增（使用内置预设）');
+                return;
+            }
             const newId = uid(type === 'endings' ? 'ending' : type);
 
             if (meta.isObject) {
@@ -1956,6 +2049,20 @@ createApp({
                     meta.data[newId] = { title: '新 CG', subtitle: '', url: '' };
                 } else if (type === 'items') {
                     meta.data[newId] = { name: '新物品', icon: '📦', image: '', description: '' };
+                } else if (meta.isEffects) {
+                    // 特效：创建自定义特效配置
+                    meta.data[newId] = {
+                        name: '新特效', icon: '✨',
+                        effectType: 'template',
+                        type: 'stardust',
+                        emoji: '✨',
+                        animation: 'fall',
+                        sizeMin: 12, sizeMax: 28,
+                        color: '',
+                        density: 30, speed: 50,
+                        jsPath: '',
+                        cssPath: '',
+                    };
                 }
             } else {
                 // Endings (array)
@@ -1969,6 +2076,11 @@ createApp({
         function deleteResource(type, id) {
             const meta = resourceMeta[type];
             if (!meta) return;
+            // 特效/角色变更：内置资源不可删除
+            if ((meta.isEffects || meta.isCharEffects) && !meta.data[id]) {
+                showToast('⚠ 内置资源不可删除');
+                return;
+            }
             // 删除包含锁定步骤的章节时给出警告
             if (meta.isChapter && chapters[id]?.some(s => s.locked)) {
                 if (!confirm(`⚠ 此章节包含已锁定的步骤，确定删除吗？`)) return;
@@ -1980,6 +2092,13 @@ createApp({
                 if (meta.isChapter) {
                     delete nodePositions[id];
                     delete chapterRenameIds[id];
+                }
+                // 特效/角色变更：停止预览
+                if (meta.isEffects) {
+                    stopEffectPreview();
+                }
+                if (meta.isCharEffects) {
+                    stopCharEffectPreview();
                 }
                 delete meta.data[id];
             } else {
@@ -2612,6 +2731,10 @@ createApp({
         // 同步 zoomPercent 到当前缩放
         watch(viewScale, (s) => { zoomPercent.value = Math.round(s * 100); });
 
+        // 关闭资源管理或切换标签时停止特效/角色变更预览
+        watch(showResourceManager, (v) => { if (!v) { stopEffectPreview(); stopCharEffectPreview(); } });
+        watch(resourceTab, (v) => { if (v !== 'effects') stopEffectPreview(); if (v !== 'charEffects') stopCharEffectPreview(); });
+
         // 关闭文件菜单（点击其他地方）
         watch(showFileMenu, (v) => {
             if (v) setTimeout(() => document.addEventListener('click', () => { showFileMenu.value = false; }, { once: true }), 100);
@@ -2691,40 +2814,20 @@ createApp({
             sprite._blob = file;
         }
 
-        // ── 特效管理器 ──────────────────────────────────────────────────
+        // ── 特效管理器（已整合至资源管理器） ────────────────────────────
         function openEffectsManager() {
-            showEffectsManager.value = true;
-            selectedEffectId.value = null;
+            showResourceManager.value = true;
+            resourceTab.value = 'effects';
+            selectedResourceId.value = null;
             stopEffectPreview();
         }
 
         function addCustomEffect() {
-            const eid = uid('effect');
-            customEffects[eid] = {
-                name: '新特效', icon: '✨',
-                // 特效类型：'builtin' | 'template' | 'custom'
-                effectType: 'template',
-                // 内置特效用
-                type: 'stardust',
-                // 模板特效用
-                emoji: '✨',
-                animation: 'fall',
-                sizeMin: 12, sizeMax: 28,
-                color: '',
-                // 通用参数
-                density: 30, speed: 50,
-                // JS 特效用
-                jsPath: '',
-                cssPath: '',
-            };
-            selectedEffectId.value = eid;
+            addResource('effects');
         }
 
         function deleteCustomEffect(eid) {
-            if (!confirm('确定删除此自定义特效吗？')) return;
-            delete customEffects[eid];
-            if (selectedEffectId.value === eid) selectedEffectId.value = null;
-            stopEffectPreview();
+            deleteResource('effects', eid);
         }
 
         function getEffectIcon(name) {
@@ -2800,6 +2903,189 @@ createApp({
             const fx = getEffectManager();
             if (fx) fx.clear(true); // 立即清理，预览容器需要立刻复用
             if (effectPreviewRef.value) effectPreviewRef.value.innerHTML = '<div class="effect-preview-bg"><span>预览已停止</span></div>';
+        }
+
+        // ── 角色变更预览（模拟游戏 Stage 数据流）─────────────────────────
+        /** 在预览 mini-stage 中创建一个占位角色并播放动画 */
+        function toggleCharEffectPreview(effectId) {
+            if (charEffectPreviewActive.value) { stopCharEffectPreview(); return; }
+            const el = charEffectPreviewRef.value;
+            if (!el) return;
+
+            // 使用当前编辑中的参数（右边面板下拉框选中的值）
+            const preset = editingCharEffect;
+            if (!preset.action) return;
+
+            el.innerHTML = '';
+            charEffectPreviewActive.value = true;
+
+            // 创建 mini-stage 容器
+            const stage = document.createElement('div');
+            stage.className = 'char-effect-stage';
+            stage.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg-primary, #0a0a0f);';
+            el.appendChild(stage);
+
+            // 创建角色占位元素（模拟游戏 fallback-placeholder）
+            const charEl = document.createElement('div');
+            charEl.className = 'char-effect-preview-char';
+            charEl.style.cssText = [
+                'position:absolute;bottom:0;left:50%;transform:translateX(-50%);',
+                'width:90px;height:140px;',
+                'display:flex;flex-direction:column;align-items:center;justify-content:flex-end;',
+                'opacity:1;',
+            ].join('');
+            stage.appendChild(charEl);
+
+            // 角色可视化（简版 fallback）
+            const head = document.createElement('div');
+            head.style.cssText = 'width:50px;height:50px;border-radius:50%;border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:22px;';
+            head.textContent = '👤';
+            charEl.appendChild(head);
+
+            const body = document.createElement('div');
+            body.style.cssText = 'width:3px;height:40px;background:rgba(255,255,255,0.2);margin:2px 0;';
+            charEl.appendChild(body);
+
+            const label = document.createElement('div');
+            label.style.cssText = 'color:rgba(255,255,255,0.5);font-size:10px;margin-top:4px;text-align:center;white-space:nowrap;';
+            label.textContent = preset.name || effectId;
+            charEl.appendChild(label);
+
+            // 根据配置应用动画
+            const action = preset.action;
+            const animName = preset.animation || preset.effect || preset.actionId || '';
+            const posKey = preset.position || 'center';
+            const dur   = preset.duration || 0.5;
+
+            // ── 辅助：入场动画关键帧映射 ──
+            const kfEnter = {
+                'fade-in':'charFadeIn','slide-in-left':'charSlideInLeft','slide-in-right':'charSlideInRight',
+                'slide-in-up':'charSlideInUp','slide-in-down':'charSlideInDown','bounce-in':'charBounceIn',
+                'zoom-in':'charZoomIn','flip-in':'charFlipIn','drop-in':'charDropIn',
+                'float-in':'charFloatIn','stumble-in':'charStumbleIn','swing-in':'charSwingIn',
+            };
+            // ── 辅助：退场动画关键帧映射 ──
+            const kfLeave = {
+                'fade-out':'charFadeOut','slide-out-left':'charSlideOutLeft','slide-out-right':'charSlideOutRight',
+                'slide-out-up':'charSlideOutUp','slide-out-down':'charSlideOutDown','bounce-out':'charBounceOut',
+                'zoom-out':'charZoomOut','flip-out':'charFlipOut','shrink-out':'charShrinkOut','vanish':'charVanish',
+            };
+            // ── 辅助：移动动画关键帧映射 ──
+            const kfMove = { 'slide-left':'charSlideLeft', 'slide-right':'charSlideRight', 'flip-move':'charFlipMove' };
+
+            /** 播放一段 CSS 关键帧动画 */
+            function playKF(el, kfName, d, fill = '') {
+                el.style.animation = `${kfName} ${d}s ease-out${fill ? ' ' + fill : ''}`;
+                charEffectPreviewTimer = setTimeout(() => { el.style.animation = ''; }, d * 1000 + 100);
+            }
+
+            if (action === 'enter') {
+                charEl.style.opacity = '0';
+                requestAnimationFrame(() => {
+                    charEl.style.opacity = '1';
+                    playKF(charEl, kfEnter[animName] || 'charFadeIn', dur || 0.6);
+                });
+            } else if (action === 'leave' || action === 'clearAll') {
+                playKF(charEl, (kfLeave[animName] || 'charFadeOut'), dur, 'forwards');
+                charEffectPreviewTimer = setTimeout(() => { charEl.style.opacity = '0'; }, dur * 1000);
+            } else if (action === 'move') {
+                const pos = POSITION_MAP_FOR_PREVIEW[posKey] || '50%';
+                charEl.style.transition = `left ${dur}s ease-out`;
+                if (kfMove[animName]) charEl.style.animation = `${kfMove[animName]} 0.5s ease-out`;
+                requestAnimationFrame(() => { charEl.style.left = pos; });
+                charEffectPreviewTimer = setTimeout(() => { charEl.style.animation = ''; }, 600);
+            } else if (action === 'update') {
+                // 更新：改变位置 + 可选动画
+                const pos = POSITION_MAP_FOR_PREVIEW[posKey] || '50%';
+                charEl.style.transition = `left ${dur}s ease-out`;
+                requestAnimationFrame(() => { charEl.style.left = pos; });
+                if (animName && kfMove[animName]) charEl.style.animation = `${kfMove[animName]} 0.5s ease-out`;
+                charEffectPreviewTimer = setTimeout(() => { charEl.style.animation = ''; }, 600);
+            } else if (action === 'effect') {
+                if (dur === 0) {
+                    charEl.style.animation = `${getEffectKF(animName)} 2s infinite`;
+                } else {
+                    playKF(charEl, getEffectKF(animName), dur);
+                }
+            } else if (action === 'action') {
+                const kfAct = `charAction${animName.charAt(0).toUpperCase() + animName.slice(1)}`;
+                playKF(charEl, kfAct, dur || 0.8);
+            } else if (action === 'speak' || action === 'speakAll') {
+                // 说话：显示脉冲效果
+                const w = preset.weight || 0.8;
+                charEl.style.animation = `charPulse ${(1.5 - w * 0.8).toFixed(1)}s infinite`;
+                // 说话气泡指示器
+                const bubble = document.createElement('div');
+                bubble.style.cssText = 'position:absolute;top:-12px;right:-8px;width:16px;height:16px;border-radius:50%;background:rgba(255,255,200,0.8);animation:charFlash 1s infinite;';
+                charEl.appendChild(bubble);
+                charEffectPreviewTimer = setTimeout(() => { charEl.style.animation = ''; bubble.remove(); }, 3000);
+            } else if (action === 'silence' || action === 'silenceAll') {
+                charEl.style.opacity = '0.5';
+                charEl.style.filter = 'grayscale(0.4)';
+                charEl.style.transition = 'all 0.5s ease';
+            } else if (action === 'swap') {
+                // 交换：翻转动画
+                const pos = POSITION_MAP_FOR_PREVIEW[posKey] || (charEl.style.left === '50%' ? '29%' : '50%');
+                playKF(charEl, 'charFlipMove', 0.6);
+                requestAnimationFrame(() => { charEl.style.left = pos; });
+            } else if (action === 'gather') {
+                // 聚集：角色移到目标位置
+                const pos = POSITION_MAP_FOR_PREVIEW[posKey] || '50%';
+                charEl.style.transition = `left ${dur}s ease-out, transform 0.4s ease-out`;
+                requestAnimationFrame(() => {
+                    charEl.style.left = pos;
+                    charEl.style.transform = `translateX(-50%) scale(0.9)`;
+                });
+                charEffectPreviewTimer = setTimeout(() => { charEl.style.transform = 'translateX(-50%) scale(1)'; }, dur * 1000 + 100);
+            } else if (action === 'scatter') {
+                // 散开：抖动 + 缩小
+                playKF(charEl, 'charShake', 0.5);
+                charEl.style.transition = 'transform 0.5s ease-out';
+                requestAnimationFrame(() => { charEl.style.transform = 'translateX(-50%) scale(0.85)'; });
+            } else if (action === 'order') {
+                // 排序：短暂闪烁示意
+                playKF(charEl, 'charFlash', 0.5);
+            } else if (action === 'opacity') {
+                charEl.style.opacity = preset.opacity != null ? preset.opacity : 1;
+                charEl.style.transition = 'opacity 0.4s ease';
+            } else if (action === 'scale') {
+                charEl.style.transition = 'transform 0.4s ease-out';
+                requestAnimationFrame(() => { charEl.style.transform = `translateX(-50%) scale(${preset.scale || 1})`; });
+            } else if (action === 'filter' || action === 'resetFilter') {
+                let fStr = '';
+                if (action === 'filter') {
+                    const f = preset.filters || {};
+                    fStr = [
+                        f.brightness !== undefined ? `brightness(${f.brightness})` : '',
+                        f.saturation !== undefined ? `saturate(${f.saturation})` : '',
+                        f.contrast !== undefined ? `contrast(${f.contrast})` : '',
+                    ].filter(Boolean).join(' ');
+                }
+                charEl.style.filter = fStr;
+                charEl.style.transition = 'filter 0.5s ease-out';
+            }
+        }
+
+        function stopCharEffectPreview() {
+            charEffectPreviewActive.value = false;
+            clearTimeout(charEffectPreviewTimer);
+            if (charEffectPreviewRef.value) {
+                charEffectPreviewRef.value.innerHTML = '<div class="effect-preview-bg"><span>点击「预览」查看角色变更效果</span></div>';
+            }
+        }
+
+        /** 简易位置映射（用于预览） */
+        const POSITION_MAP_FOR_PREVIEW = {
+            'left-far':'17%', 'left':'29%', 'center-left':'40%',
+            'center':'50%', 'center-right':'60%', 'right':'71%', 'right-far':'83%',
+        };
+
+        /** 角色特效 keyframe 名称映射 */
+        function getEffectKF(name) {
+            const m = { shake:'charShake', flash:'charFlash', glow:'charGlow', float:'charFloat',
+                pulse:'charPulse', tremble:'charTremble', blur:'charBlur', highlight:'charHighlight',
+                shine:'charShine', dizzy:'charDizzy' };
+            return m[name] || `char${name.charAt(0).toUpperCase() + name.slice(1)}`;
         }
 
         // ── 资源包导出（含图片资源）──────────────────────────────────────
@@ -3707,7 +3993,6 @@ createApp({
                 if (showGameSettings.value) { showGameSettings.value = false; e.preventDefault(); return; }
                 if (showResourceManager.value) { showResourceManager.value = false; e.preventDefault(); return; }
                 if (showExportModal.value) { showExportModal.value = false; e.preventDefault(); return; }
-                if (showEffectsManager.value) { showEffectsManager.value = false; e.preventDefault(); return; }
                 if (showFileMenu.value) { showFileMenu.value = false; e.preventDefault(); return; }
                 if (editingGlobalSearch.value) { endGlobalSearch(); e.preventDefault(); return; }
                 if (showZoomInput.value) { showZoomInput.value = false; e.preventDefault(); return; }
@@ -4000,8 +4285,10 @@ createApp({
             showZoomInput, zoomPercent,
             detailPanelCollapsed, detailPanelWidth,
             showFileMenu, tooltip, selectedSpriteId, showAvatarSection,
-            showEffectsManager, customEffects, selectedEffectId,
+            customEffects, customCharEffects,
             effectPreviewRef, effectPreviewActive, builtinEffects,
+            charEffectPreviewRef, charEffectPreviewActive, builtinCharEffects, editingCharEffect,
+            ANIM_ENTER, ANIM_LEAVE, ANIM_MOVE, POSITIONS, FX_CHAR, ACTIONS,
             nodeStyles, editorGroups, canvasComments,
             portDragging, portDragCurve, resizingNode,
             batchEditMode, batchCommonProps, applyBatchStyle,
@@ -4057,6 +4344,7 @@ createApp({
             onResourceDrop, onSpriteDrop,
             openEffectsManager, addCustomEffect, deleteCustomEffect,
             getEffectIcon, toggleEffectPreview, stopEffectPreview,
+            toggleCharEffectPreview, stopCharEffectPreview,
             exportPackZipWithAssets,
             // 同步 & 校验
             syncToGame, previewStory,
