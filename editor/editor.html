@@ -1432,17 +1432,19 @@
                                             <span v-if="!charEffectPreviewActive">调整下方参数后点击「预览」查看效果</span>
                                         </div>
                                     </div>
-                                    <button class="tb-btn tb-sm" @click="toggleCharEffectPreview(selectedResourceId)" style="margin-bottom:12px">
+                                    <button class="tb-btn tb-sm" @click="toggleCharEffectPreview(selectedResourceId)">
                                         {{ charEffectPreviewActive ? '⏹ 停止预览' : '▶ 预览角色变更' }}
                                     </button>
 
-                                    <div class="section-label">⚙️ 变更参数</div>
+                                    <div class="section-label" style="margin-top:12px">⚙️ 变更参数</div>
+
+                                    <!-- ═══ 动作类型（只读） ═══ -->
                                     <div class="form-row">
                                         <label>动作类型</label>
                                         <input type="text" :value="selectedResource.action" disabled style="font-family:monospace;font-size:12px" />
                                     </div>
 
-                                    <!-- ═══ enter ═══ -->
+                                    <!-- ═══ enter: 入场 ═══ -->
                                     <template v-if="selectedResource.action === 'enter'">
                                         <div class="form-row"><label>入场动画</label>
                                             <select v-model="selectedResource.animation">
@@ -1456,7 +1458,23 @@
                                         </div>
                                     </template>
 
-                                    <!-- ═══ leave ═══ -->
+                                    <!-- ═══ update: 更新精灵 ═══ -->
+                                    <template v-if="selectedResource.action === 'update'">
+                                        <div class="form-row"><label>动画</label>
+                                            <select v-model="selectedResource.animation">
+                                                <option value="">默认</option>
+                                                <option value="fade-in">fade-in</option>
+                                                <option value="bounce-in">bounce-in</option>
+                                                <option value="pulse">pulse</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-row"><label>精灵ID</label>
+                                            <input type="text" v-model="selectedResource.spriteId" placeholder="default" />
+                                        </div>
+                                        <div class="settings-note">更新角色立绘（精灵），可选附带动画过渡。</div>
+                                    </template>
+
+                                    <!-- ═══ leave: 退场 ═══ -->
                                     <template v-if="selectedResource.action === 'leave'">
                                         <div class="form-row"><label>退场动画</label>
                                             <select v-model="selectedResource.animation">
@@ -1465,31 +1483,12 @@
                                         </div>
                                         <div class="form-row"><label>持续时长</label>
                                             <select v-model="selectedResource.duration">
-                                                <option v-for="d in [0.3,0.5,0.6,0.8,1.0]" :key="d" :value="d">{{ d }}s</option>
+                                                <option v-for="d in DURATIONS" :key="d" :value="d">{{ d }}s</option>
                                             </select>
                                         </div>
                                     </template>
 
-                                    <!-- ═══ update ═══ -->
-                                    <template v-if="selectedResource.action === 'update'">
-                                        <div class="form-row"><label>立绘 ID</label>
-                                            <input type="text" v-model="selectedResource.spriteId" placeholder="默认（default立绘）" />
-                                        </div>
-                                        <div class="form-row"><label>动画</label>
-                                            <select v-model="selectedResource.animation">
-                                                <option value="">默认（无动画）</option>
-                                                <option v-for="a in ANIM_ENTER" :key="a" :value="a">{{ a }}</option>
-                                                <option v-for="a in ANIM_MOVE" :key="a" :value="a">{{ a }}</option>
-                                            </select>
-                                        </div>
-                                        <div class="form-row"><label>位置</label>
-                                            <select v-model="selectedResource.position">
-                                                <option v-for="p in POSITIONS" :key="p" :value="p">{{ p }}</option>
-                                            </select>
-                                        </div>
-                                    </template>
-
-                                    <!-- ═══ move ═══ -->
+                                    <!-- ═══ move: 移动 ═══ -->
                                     <template v-if="selectedResource.action === 'move'">
                                         <div class="form-row"><label>目标位置</label>
                                             <select v-model="selectedResource.position">
@@ -1501,53 +1500,56 @@
                                                 <option v-for="a in ANIM_MOVE" :key="a" :value="a">{{ a }}</option>
                                             </select>
                                         </div>
+                                        <div class="form-row form-row-2col">
+                                            <div class="form-col"><label>偏移 X</label><input type="number" v-model.number="selectedResource.offsetX" placeholder="0" style="width:100%" /></div>
+                                            <div class="form-col"><label>偏移 Y</label><input type="number" v-model.number="selectedResource.offsetY" placeholder="0" style="width:100%" /></div>
+                                        </div>
                                     </template>
 
-                                    <!-- ═══ speak ═══ -->
+                                    <!-- ═══ speak: 说话 ═══ -->
                                     <template v-if="selectedResource.action === 'speak'">
                                         <div class="form-row"><label>音量权重</label>
                                             <input type="range" min="0" max="1" step="0.1" v-model.number="selectedResource.weight" style="flex:1" />
-                                            <span class="ce-range-val">{{ selectedResource.weight != null ? selectedResource.weight.toFixed(1) : '0.8' }}</span>
+                                            <span style="margin-left:8px;font-size:12px;color:var(--text-secondary)">{{ selectedResource.weight || 1 }}</span>
                                         </div>
-                                        <div class="form-row"><label>动画</label>
-                                            <select v-model="selectedResource.animation">
-                                                <option value="">默认（无动画）</option>
-                                                <option v-for="a in ANIM_ENTER" :key="a" :value="a">{{ a }}</option>
-                                            </select>
-                                        </div>
+                                        <div class="settings-note">标记角色为"正在说话"，音量越高视觉越突出。</div>
                                     </template>
 
-                                    <!-- ═══ silence ═══ -->
+                                    <!-- ═══ silence: 沉默 ═══ -->
                                     <template v-if="selectedResource.action === 'silence'">
-                                        <div class="settings-note">让该角色停止说话，无需配置参数。</div>
+                                        <div class="settings-note">停止指定角色的说话状态。</div>
                                     </template>
 
-                                    <!-- ═══ speakAll ═══ -->
+                                    <!-- ═══ speakAll: 全员说话 ═══ -->
                                     <template v-if="selectedResource.action === 'speakAll'">
-                                        <div class="form-row"><label>动画</label>
-                                            <select v-model="selectedResource.animation">
-                                                <option value="">默认（无动画）</option>
-                                                <option v-for="a in ANIM_ENTER" :key="a" :value="a">{{ a }}</option>
-                                            </select>
+                                        <div class="form-row"><label>角色 IDs</label>
+                                            <input type="text" v-model="selectedResource.ids" placeholder="逗号分隔，如 _a,_b" />
                                         </div>
-                                        <div class="settings-note">所有指定角色开始说话，角色 ID 在实际使用时按逗号分隔填入。</div>
+                                        <div class="form-row"><label>权重</label>
+                                            <input type="text" v-model="selectedResource.weights" placeholder="逗号分隔，如 1.0,0.7" />
+                                        </div>
                                     </template>
 
-                                    <!-- ═══ silenceAll ═══ -->
+                                    <!-- ═══ silenceAll: 全沉默 ═══ -->
                                     <template v-if="selectedResource.action === 'silenceAll'">
-                                        <div class="settings-note">停止所有角色的说话状态，无需配置参数。</div>
+                                        <div class="settings-note">停止所有角色的说话状态。</div>
                                     </template>
 
-                                    <!-- ═══ action ═══ -->
+                                    <!-- ═══ action: 动作 ═══ -->
                                     <template v-if="selectedResource.action === 'action'">
                                         <div class="form-row"><label>角色动作</label>
                                             <select v-model="selectedResource.actionId">
                                                 <option v-for="a in ACTIONS" :key="a" :value="a">{{ a }}</option>
                                             </select>
                                         </div>
+                                        <div class="form-row"><label>持续时长</label>
+                                            <select v-model="selectedResource.duration">
+                                                <option v-for="d in DURATIONS" :key="d" :value="d">{{ d }}s</option>
+                                            </select>
+                                        </div>
                                     </template>
 
-                                    <!-- ═══ effect ═══ -->
+                                    <!-- ═══ effect: 特效 ═══ -->
                                     <template v-if="selectedResource.action === 'effect'">
                                         <div class="form-row"><label>角色特效</label>
                                             <select v-model="selectedResource.effect">
@@ -1565,126 +1567,141 @@
                                         </div>
                                     </template>
 
-                                    <!-- ═══ filter ═══ -->
+                                    <!-- ═══ filter: 滤镜 ═══ -->
                                     <template v-if="selectedResource.action === 'filter'">
                                         <div class="form-row"><label>亮度</label>
                                             <input type="range" min="0" max="2" step="0.05" v-model.number="selectedResource.filters.brightness" style="flex:1" />
-                                            <span class="ce-range-val">{{ selectedResource.filters?.brightness?.toFixed(2) || '1.00' }}</span>
+                                            <span style="margin-left:8px;font-size:12px;color:var(--text-secondary)">{{ (selectedResource.filters && selectedResource.filters.brightness) || 1 }}</span>
                                         </div>
                                         <div class="form-row"><label>饱和度</label>
                                             <input type="range" min="0" max="2" step="0.05" v-model.number="selectedResource.filters.saturation" style="flex:1" />
-                                            <span class="ce-range-val">{{ selectedResource.filters?.saturation?.toFixed(2) || '1.00' }}</span>
+                                            <span style="margin-left:8px;font-size:12px;color:var(--text-secondary)">{{ (selectedResource.filters && selectedResource.filters.saturation) || 1 }}</span>
                                         </div>
                                         <div class="form-row"><label>对比度</label>
                                             <input type="range" min="0" max="2" step="0.05" v-model.number="selectedResource.filters.contrast" style="flex:1" />
-                                            <span class="ce-range-val">{{ selectedResource.filters?.contrast?.toFixed(2) || '1.00' }}</span>
+                                            <span style="margin-left:8px;font-size:12px;color:var(--text-secondary)">{{ (selectedResource.filters && selectedResource.filters.contrast) || 1 }}</span>
                                         </div>
                                     </template>
 
-                                    <!-- ═══ resetFilter ═══ -->
+                                    <!-- ═══ resetFilter: 清滤镜 ═══ -->
                                     <template v-if="selectedResource.action === 'resetFilter'">
-                                        <div class="settings-note">重置该角色的颜色滤镜到默认值，无需配置参数。</div>
+                                        <div class="settings-note">重置指定角色的颜色滤镜到默认值。</div>
                                     </template>
 
-                                    <!-- ═══ scale ═══ -->
+                                    <!-- ═══ scale: 缩放 ═══ -->
                                     <template v-if="selectedResource.action === 'scale'">
                                         <div class="form-row"><label>缩放比例</label>
                                             <select v-model="selectedResource.scale">
-                                                <option v-for="s in [0.5,0.7,1.0,1.3,1.5,2.0]" :key="s" :value="s">{{ s }}×</option>
+                                                <option v-for="s in [0.3,0.5,0.7,0.8,1.0,1.2,1.3,1.5,2.0]" :key="s" :value="s">{{ s }}×</option>
                                             </select>
                                         </div>
                                     </template>
 
-                                    <!-- ═══ opacity ═══ -->
+                                    <!-- ═══ opacity: 透明度 ═══ -->
                                     <template v-if="selectedResource.action === 'opacity'">
                                         <div class="form-row"><label>透明度值</label>
                                             <select v-model="selectedResource.opacity">
-                                                <option v-for="o in [0.1,0.25,0.5,0.75,0.9]" :key="o" :value="o">{{ o }}</option>
+                                                <option v-for="o in [0.0,0.1,0.25,0.5,0.75,0.9,1.0]" :key="o" :value="o">{{ o }}</option>
                                             </select>
                                         </div>
                                     </template>
 
-                                    <!-- ═══ swap ═══ -->
+                                    <!-- ═══ swap: 交换位置 ═══ -->
                                     <template v-if="selectedResource.action === 'swap'">
-                                        <div class="settings-note">交换两个角色的位置（id1 ↔ id2），实际使用时指定两位角色。</div>
+                                        <div class="form-row form-row-2col">
+                                            <div class="form-col"><label>角色 A</label><input type="text" v-model="selectedResource.id1" placeholder="char_1" /></div>
+                                            <div class="form-col"><label>角色 B</label><input type="text" v-model="selectedResource.id2" placeholder="char_2" /></div>
+                                        </div>
+                                        <div class="settings-note">交换两个角色的位置，双方同时播放 swap 动画。</div>
                                     </template>
 
-                                    <!-- ═══ gather ═══ -->
+                                    <!-- ═══ gather: 聚集 ═══ -->
                                     <template v-if="selectedResource.action === 'gather'">
-                                        <div class="form-row"><label>间距</label>
-                                            <input type="number" v-model.number="selectedResource.spread" step="0.01" min="0.01" max="0.5" placeholder="0.15" />
+                                        <div class="form-row"><label>角色 IDs</label>
+                                            <input type="text" v-model="selectedResource.ids" placeholder="逗号分隔" />
                                         </div>
-                                        <div class="form-row"><label>目标位置</label>
+                                        <div class="form-row"><label>聚集位置</label>
                                             <select v-model="selectedResource.position">
                                                 <option v-for="p in POSITIONS" :key="p" :value="p">{{ p }}</option>
                                             </select>
                                         </div>
-                                        <div class="form-row"><label>动画</label>
+                                        <div class="form-row"><label>间距 (spread)</label>
+                                            <input type="number" v-model.number="selectedResource.spread" min="0.05" max="0.5" step="0.01" />
+                                        </div>
+                                        <div class="form-row"><label>入场动画</label>
                                             <select v-model="selectedResource.animation">
-                                                <option value="">默认</option>
-                                                <option v-for="a in ANIM_ENTER" :key="a" :value="a">{{ a }}</option>
+                                                <option value="slide-in-up">slide-in-up</option>
+                                                <option value="fade-in">fade-in</option>
+                                                <option value="bounce-in">bounce-in</option>
+                                                <option value="zoom-in">zoom-in</option>
                                             </select>
                                         </div>
-                                        <div class="settings-note">让多位角色聚集到目标位置，角色 ID 在实际使用时以逗号分隔填入。</div>
                                     </template>
 
-                                    <!-- ═══ scatter ═══ -->
+                                    <!-- ═══ scatter: 散开 ═══ -->
                                     <template v-if="selectedResource.action === 'scatter'">
-                                        <div class="form-row"><label>动画</label>
+                                        <div class="form-row"><label>角色 IDs</label>
+                                            <input type="text" v-model="selectedResource.ids" placeholder="逗号分隔" />
+                                        </div>
+                                        <div class="form-row"><label>散开动画</label>
                                             <select v-model="selectedResource.animation">
-                                                <option value="">默认</option>
-                                                <option v-for="a in ANIM_LEAVE" :key="a" :value="a">{{ a }}</option>
-                                                <option value="shake">shake</option>
+                                                <option value="slide-out-right">slide-out-right</option>
+                                                <option value="slide-out-left">slide-out-left</option>
+                                                <option value="fade-out">fade-out</option>
                                             </select>
                                         </div>
-                                        <div class="settings-note">让多位角色从当前位置散开。</div>
                                     </template>
 
-                                    <!-- ═══ order ═══ -->
+                                    <!-- ═══ order: 排序 ═══ -->
                                     <template v-if="selectedResource.action === 'order'">
-                                        <div class="settings-note">按指定顺序重新排列角色层级（ids 以逗号分隔），预览将闪烁表示。</div>
+                                        <div class="form-row"><label>角色 IDs（按层级顺序）</label>
+                                            <input type="text" v-model="selectedResource.ids" placeholder="逗号分隔" />
+                                        </div>
+                                        <div class="settings-note">重新排列角色的 Z-order 层级，在前的在上层。</div>
                                     </template>
 
-                                    <!-- ═══ clearAll ═══ -->
+                                    <!-- ═══ clearAll: 全清 ═══ -->
                                     <template v-if="selectedResource.action === 'clearAll'">
                                         <div class="form-row"><label>退场动画</label>
                                             <select v-model="selectedResource.animation">
+                                                <option value="fade-out">fade-out</option>
+                                                <option value="shrink-out">shrink-out</option>
+                                                <option value="vanish">vanish</option>
                                                 <option v-for="a in ANIM_LEAVE" :key="a" :value="a">{{ a }}</option>
                                             </select>
                                         </div>
                                         <div class="form-row"><label>持续时长</label>
                                             <select v-model="selectedResource.duration">
-                                                <option v-for="d in [0.3,0.5,0.8,1.0]" :key="d" :value="d">{{ d }}s</option>
+                                                <option v-for="d in DURATIONS" :key="d" :value="d">{{ d }}s</option>
                                             </select>
                                         </div>
-                                        <div class="settings-note">清空舞台上所有角色。</div>
                                     </template>
 
+                                    <!-- ═══ 说明 ═══ -->
                                     <div class="section-label">📋 说明</div>
-                                    <div class="settings-note" style="line-height:1.8">
+                                    <div class="settings-note">
                                         <strong>{{ selectedResource.name || selectedResourceId }}</strong>
-                                        <span v-if="selectedResource.action === 'enter'">—— 以 <em>{{ selectedResource.animation }}</em> 入场到 <em>{{ selectedResource.position }}</em> 位置。</span>
-                                        <span v-if="selectedResource.action === 'leave'">—— 以 <em>{{ selectedResource.animation }}</em> 退场，持续 <em>{{ selectedResource.duration }}s</em>。</span>
-                                        <span v-if="selectedResource.action === 'update'">—— 更新角色立绘/动画/位置{{ selectedResource.spriteId ? ' → ' + selectedResource.spriteId : '' }}。</span>
-                                        <span v-if="selectedResource.action === 'move'">—— 移动到 <em>{{ selectedResource.position }}</em>，动画 <em>{{ selectedResource.animation }}</em>。</span>
-                                        <span v-if="selectedResource.action === 'speak'">—— 开始说话，权重 <em>{{ selectedResource.weight }}</em>{{ selectedResource.animation ? '，动画 ' + selectedResource.animation : '' }}。</span>
-                                        <span v-if="selectedResource.action === 'silence'">—— 让角色停止说话。</span>
-                                        <span v-if="selectedResource.action === 'speakAll'">—— 全员开始说话{{ selectedResource.animation ? '，动画 ' + selectedResource.animation : '' }}。</span>
-                                        <span v-if="selectedResource.action === 'silenceAll'">—— 全员停止说话。</span>
-                                        <span v-if="selectedResource.action === 'action'">—— 执行 <em>{{ selectedResource.actionId }}</em> 动作。</span>
-                                        <span v-if="selectedResource.action === 'effect'">—— 施加 <em>{{ selectedResource.effect }}</em>{{ selectedResource.duration > 0 ? '，持续 ' + selectedResource.duration + 's' : '（循环）' }}。</span>
-                                        <span v-if="selectedResource.action === 'filter'">—— 调整亮度/饱和度/对比度滤镜。</span>
-                                        <span v-if="selectedResource.action === 'resetFilter'">—— 重置颜色滤镜到默认值。</span>
-                                        <span v-if="selectedResource.action === 'scale'">—— 缩放至 <em>{{ selectedResource.scale }}×</em>。</span>
-                                        <span v-if="selectedResource.action === 'opacity'">—— 透明度设为 <em>{{ selectedResource.opacity }}</em>。</span>
+                                        <span v-if="selectedResource.action === 'enter'">—— 让角色以 <em>{{ selectedResource.animation }}</em> 动画入场到 <em>{{ selectedResource.position }}</em> 位置。</span>
+                                        <span v-if="selectedResource.action === 'update'">—— 将角色立绘切换为 <em>{{ selectedResource.spriteId || '默认' }}</em>。</span>
+                                        <span v-if="selectedResource.action === 'leave'">—— 让角色以 <em>{{ selectedResource.animation }}</em> 动画退场，持续 <em>{{ selectedResource.duration }}s</em>。</span>
+                                        <span v-if="selectedResource.action === 'move'">—— 让角色移到 <em>{{ selectedResource.position }}</em>，使用 <em>{{ selectedResource.animation }}</em> 动画。</span>
+                                        <span v-if="selectedResource.action === 'speak'">—— 标记角色为"说话"，音量权重 <em>{{ selectedResource.weight || 1 }}</em>。</span>
+                                        <span v-if="selectedResource.action === 'silence'">—— 停止角色说话，恢复普通层级。</span>
+                                        <span v-if="selectedResource.action === 'speakAll'">—— 让多个角色同时说话。</span>
+                                        <span v-if="selectedResource.action === 'silenceAll'">—— 停止所有角色说话。</span>
+                                        <span v-if="selectedResource.action === 'action'">—— 让角色执行 <em>{{ selectedResource.actionId }}</em> 动作{{ selectedResource.duration > 0 ? '，持续' + selectedResource.duration + 's' : '' }}。</span>
+                                        <span v-if="selectedResource.action === 'effect'">—— 施加 <em>{{ selectedResource.effect }}</em> 特效{{ selectedResource.duration > 0 ? '，持续' + selectedResource.duration + 's' : '（循环）' }}。</span>
+                                        <span v-if="selectedResource.action === 'filter'">—— 调整颜色滤镜（亮度/饱和度/对比度）。</span>
+                                        <span v-if="selectedResource.action === 'resetFilter'">—— 清除角色颜色滤镜。</span>
+                                        <span v-if="selectedResource.action === 'scale'">—— 将角色缩放到 <em>{{ selectedResource.scale }}×</em>。</span>
+                                        <span v-if="selectedResource.action === 'opacity'">—— 将角色透明度设为 <em>{{ selectedResource.opacity }}</em>。</span>
                                         <span v-if="selectedResource.action === 'swap'">—— 交换两个角色的位置。</span>
-                                        <span v-if="selectedResource.action === 'gather'">—— 聚集到 <em>{{ selectedResource.position }}</em>（间距 {{ selectedResource.spread }}）。</span>
-                                        <span v-if="selectedResource.action === 'scatter'">—— 散开{{ selectedResource.animation ? '（动画 ' + selectedResource.animation + '）' : '' }}。</span>
-                                        <span v-if="selectedResource.action === 'order'">—— 按顺序重排角色层级。</span>
-                                        <span v-if="selectedResource.action === 'clearAll'">—— 以 <em>{{ selectedResource.animation }}</em> 清空全部角色。</span>
+                                        <span v-if="selectedResource.action === 'gather'">—— 将角色聚集到 <em>{{ selectedResource.position }}</em>。</span>
+                                        <span v-if="selectedResource.action === 'scatter'">—— 将角色分散到预设位置。</span>
+                                        <span v-if="selectedResource.action === 'order'">—— 重新排列角色层级顺序。</span>
+                                        <span v-if="selectedResource.action === 'clearAll'">—— 清空舞台上所有角色。</span>
                                     </div>
 
-                                    <!-- 删除按钮（仅自定义角色变更） -->
                                     <div v-if="customCharEffects[selectedResourceId]" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color)">
                                         <button class="tb-btn tb-danger tb-sm" @click="deleteResource('charEffects', selectedResourceId)">🗑️ 删除此角色变更</button>
                                     </div>

@@ -326,29 +326,31 @@ createApp({
         const POSITIONS  = ['center','left','right','left-far','center-left','center-right','right-far'];
         const FX_CHAR    = ['shake','flash','glow','float','pulse','tremble','blur','highlight','shine','dizzy'];
         const ACTIONS    = ['wave','bow','point','nod','shake-head','sit','stand','jump','fall','turn'];
+        const DURATIONS  = [0.3, 0.5, 0.6, 0.8, 1.0, 1.5, 2.0];
 
         /** 内置角色变更动作类型（左边列表） */
-        const EFFECT_DURS = [0, 0.3, 0.5, 0.8, 1.0];
         const builtinCharEffects = {
+            // ── 单角色操作 ──
             'char-enter':       { name:'入场',     icon:'🎭', action:'enter',       animation:'fade-in',        position:'center' },
+            'char-update':      { name:'更新精灵', icon:'🔄', action:'update',      animation:'',               spriteId:'default' },
             'char-leave':       { name:'退场',     icon:'🚪', action:'leave',       animation:'fade-out',       duration:0.5 },
-            'char-update':      { name:'更新',     icon:'🔄', action:'update',      animation:'',               position:'center', spriteId:'' },
             'char-move':        { name:'移动',     icon:'🚶', action:'move',        animation:'slide-left',     position:'left' },
-            'char-speak':       { name:'说话',     icon:'💬', action:'speak',       weight:0.8,                 animation:'' },
+            'char-speak':       { name:'说话',     icon:'💬', action:'speak',       weight:1.0 },
             'char-silence':     { name:'沉默',     icon:'🔇', action:'silence' },
-            'char-speakAll':    { name:'全员说',   icon:'🗣️', action:'speakAll',    animation:'' },
-            'char-silenceAll':  { name:'全沉默',   icon:'🤫', action:'silenceAll' },
-            'char-action':      { name:'动作',     icon:'💃', action:'action',      actionId:'wave' },
+            'char-action':      { name:'动作',     icon:'💃', action:'action',      actionId:'wave',            duration:0.8 },
             'char-effect':      { name:'特效',     icon:'💫', action:'effect',      effect:'shake',             duration:0.5 },
             'char-filter':      { name:'滤镜',     icon:'🎨', action:'filter',      filters:{ brightness:1.0, saturation:1.0, contrast:1.0 } },
-            'char-resetFilter': { name:'清滤镜',   icon:'🧹', action:'resetFilter' },
+            'char-reset-filter':{ name:'清滤镜',   icon:'🔄', action:'resetFilter' },
             'char-scale':       { name:'缩放',     icon:'🔍', action:'scale',       scale:1.3 },
             'char-opacity':     { name:'透明度',   icon:'👻', action:'opacity',     opacity:0.5 },
-            'char-swap':        { name:'交换',     icon:'🔄', action:'swap' },
-            'char-gather':      { name:'聚集',     icon:'📦', action:'gather',      spread:0.15,                position:'center', animation:'' },
-            'char-scatter':     { name:'散开',     icon:'💥', action:'scatter',     animation:'' },
-            'char-order':       { name:'排序',     icon:'📋', action:'order' },
-            'char-clearAll':    { name:'全清',     icon:'🗑️', action:'clearAll',    animation:'fade-out',       duration:0.5 },
+            // ── 多角色操作 ──
+            'char-speak-all':   { name:'全员说话', icon:'🗣️', action:'speakAll',    ids:['_a','_b'],           weights:[1.0, 0.7] },
+            'char-silence-all': { name:'全沉默',   icon:'🤫', action:'silenceAll' },
+            'char-swap':        { name:'交换位置', icon:'🔄', action:'swap',         id1:'_a',                   id2:'_b' },
+            'char-gather':      { name:'聚集',     icon:'📦', action:'gather',      ids:['_a','_b'],           position:'center',  spread:0.15,    animation:'slide-in-up' },
+            'char-scatter':     { name:'散开',     icon:'💥', action:'scatter',     ids:['_a','_b'],           animation:'slide-out-right' },
+            'char-order':       { name:'排序',     icon:'📋', action:'order',       ids:['_a','_b'] },
+            'char-clear-all':   { name:'全清',     icon:'🗑️', action:'clearAll',    animation:'fade-out',       duration:0.5 },
         };
 
         /** 当前编辑中的角色变更参数（克隆自内置预设，在右边面板可修改） */
@@ -2906,163 +2908,178 @@ createApp({
         }
 
         // ── 角色变更预览（模拟游戏 Stage 数据流）─────────────────────────
-        /** 在预览 mini-stage 中创建一个占位角色并播放动画 */
+        /** 在预览 mini-stage 中创建一个占位字符并播放动画 */
         function toggleCharEffectPreview(effectId) {
             if (charEffectPreviewActive.value) { stopCharEffectPreview(); return; }
             const el = charEffectPreviewRef.value;
             if (!el) return;
 
-            // 使用当前编辑中的参数（右边面板下拉框选中的值）
             const preset = editingCharEffect;
             if (!preset.action) return;
 
             el.innerHTML = '';
             charEffectPreviewActive.value = true;
 
-            // 创建 mini-stage 容器
             const stage = document.createElement('div');
             stage.className = 'char-effect-stage';
             stage.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg-primary, #0a0a0f);';
             el.appendChild(stage);
 
-            // 创建角色占位元素（模拟游戏 fallback-placeholder）
-            const charEl = document.createElement('div');
-            charEl.className = 'char-effect-preview-char';
-            charEl.style.cssText = [
-                'position:absolute;bottom:0;left:50%;transform:translateX(-50%);',
-                'width:90px;height:140px;',
-                'display:flex;flex-direction:column;align-items:center;justify-content:flex-end;',
-                'opacity:1;',
-            ].join('');
-            stage.appendChild(charEl);
+            /** 创建一个角色占位元素 */
+            function mkChar(id, pos, emoji = '👤') {
+                const wrap = document.createElement('div');
+                wrap.className = 'char-effect-preview-char';
+                const pp = POSITION_MAP_FOR_PREVIEW[pos] || '50%';
+                wrap.style.cssText = `position:absolute;bottom:0;left:${pp};transform:translateX(-50%);width:70px;height:110px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;`;
+                const h = document.createElement('div');
+                h.style.cssText = 'width:40px;height:40px;border-radius:50%;border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:18px;';
+                h.textContent = emoji;
+                wrap.appendChild(h);
+                const b = document.createElement('div');
+                b.style.cssText = 'width:3px;height:30px;background:rgba(255,255,255,0.2);margin:2px 0;';
+                wrap.appendChild(b);
+                const lb = document.createElement('div');
+                lb.style.cssText = 'color:rgba(255,255,255,0.4);font-size:8px;text-align:center;white-space:nowrap;';
+                lb.textContent = id.startsWith('_') ? '角色' : id;
+                wrap.appendChild(lb);
+                // 说话波纹
+                const sp = document.createElement('div');
+                sp.className = 'char-effect-speak-waves';
+                sp.style.cssText = 'display:none;position:absolute;top:-15px;left:50%;transform:translateX(-50%);gap:2px;';
+                sp.innerHTML = '<span style="width:3px;height:10px;background:rgba(255,255,255,0.6);border-radius:2px;display:inline-block;animation:charSpeakWave 0.4s infinite alternate"></span>'.repeat(2);
+                wrap.appendChild(sp);
+                stage.appendChild(wrap);
+                return { wrap, sp };
+            }
 
-            // 角色可视化（简版 fallback）
-            const head = document.createElement('div');
-            head.style.cssText = 'width:50px;height:50px;border-radius:50%;border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:22px;';
-            head.textContent = '👤';
-            charEl.appendChild(head);
-
-            const body = document.createElement('div');
-            body.style.cssText = 'width:3px;height:40px;background:rgba(255,255,255,0.2);margin:2px 0;';
-            charEl.appendChild(body);
-
-            const label = document.createElement('div');
-            label.style.cssText = 'color:rgba(255,255,255,0.5);font-size:10px;margin-top:4px;text-align:center;white-space:nowrap;';
-            label.textContent = preset.name || effectId;
-            charEl.appendChild(label);
-
-            // 根据配置应用动画
             const action = preset.action;
             const animName = preset.animation || preset.effect || preset.actionId || '';
             const posKey = preset.position || 'center';
-            const dur   = preset.duration || 0.5;
+            const dur = preset.duration || 0.5;
 
-            // ── 辅助：入场动画关键帧映射 ──
-            const kfEnter = {
-                'fade-in':'charFadeIn','slide-in-left':'charSlideInLeft','slide-in-right':'charSlideInRight',
-                'slide-in-up':'charSlideInUp','slide-in-down':'charSlideInDown','bounce-in':'charBounceIn',
-                'zoom-in':'charZoomIn','flip-in':'charFlipIn','drop-in':'charDropIn',
-                'float-in':'charFloatIn','stumble-in':'charStumbleIn','swing-in':'charSwingIn',
-            };
-            // ── 辅助：退场动画关键帧映射 ──
-            const kfLeave = {
-                'fade-out':'charFadeOut','slide-out-left':'charSlideOutLeft','slide-out-right':'charSlideOutRight',
-                'slide-out-up':'charSlideOutUp','slide-out-down':'charSlideOutDown','bounce-out':'charBounceOut',
-                'zoom-out':'charZoomOut','flip-out':'charFlipOut','shrink-out':'charShrinkOut','vanish':'charVanish',
-            };
-            // ── 辅助：移动动画关键帧映射 ──
-            const kfMove = { 'slide-left':'charSlideLeft', 'slide-right':'charSlideRight', 'flip-move':'charFlipMove' };
-
-            /** 播放一段 CSS 关键帧动画 */
-            function playKF(el, kfName, d, fill = '') {
-                el.style.animation = `${kfName} ${d}s ease-out${fill ? ' ' + fill : ''}`;
-                charEffectPreviewTimer = setTimeout(() => { el.style.animation = ''; }, d * 1000 + 100);
+            // ids 字段可能是数组或逗号字符串，统一规范化为数组
+            function normIds(idsVal) {
+                if (!idsVal) return [];
+                if (Array.isArray(idsVal)) return idsVal;
+                return String(idsVal).split(',').map(s => s.trim()).filter(Boolean);
             }
+            const ids = normIds(preset.ids);
+
+            // ── 按 action 创建预览 ──
+            let chars = [];
 
             if (action === 'enter') {
-                charEl.style.opacity = '0';
-                requestAnimationFrame(() => {
-                    charEl.style.opacity = '1';
-                    playKF(charEl, kfEnter[animName] || 'charFadeIn', dur || 0.6);
-                });
-            } else if (action === 'leave' || action === 'clearAll') {
-                playKF(charEl, (kfLeave[animName] || 'charFadeOut'), dur, 'forwards');
-                charEffectPreviewTimer = setTimeout(() => { charEl.style.opacity = '0'; }, dur * 1000);
-            } else if (action === 'move') {
-                const pos = POSITION_MAP_FOR_PREVIEW[posKey] || '50%';
-                charEl.style.transition = `left ${dur}s ease-out`;
-                if (kfMove[animName]) charEl.style.animation = `${kfMove[animName]} 0.5s ease-out`;
-                requestAnimationFrame(() => { charEl.style.left = pos; });
-                charEffectPreviewTimer = setTimeout(() => { charEl.style.animation = ''; }, 600);
+                chars.push(mkChar('_a', posKey));
+                _playEnterAnim(chars[0].wrap, animName, dur);
             } else if (action === 'update') {
-                // 更新：改变位置 + 可选动画
-                const pos = POSITION_MAP_FOR_PREVIEW[posKey] || '50%';
-                charEl.style.transition = `left ${dur}s ease-out`;
-                requestAnimationFrame(() => { charEl.style.left = pos; });
-                if (animName && kfMove[animName]) charEl.style.animation = `${kfMove[animName]} 0.5s ease-out`;
-                charEffectPreviewTimer = setTimeout(() => { charEl.style.animation = ''; }, 600);
-            } else if (action === 'effect') {
-                if (dur === 0) {
-                    charEl.style.animation = `${getEffectKF(animName)} 2s infinite`;
-                } else {
-                    playKF(charEl, getEffectKF(animName), dur);
+                chars.push(mkChar('_a', 'center'));
+                chars[0].wrap.style.transition = 'transform 0.3s ease-out';
+                requestAnimationFrame(() => { chars[0].wrap.style.transform = 'translateX(-50%) scale(1.1)'; });
+                charEffectPreviewTimer = setTimeout(() => { chars[0].wrap.style.transform = 'translateX(-50%) scale(1)'; chars[0].wrap.style.transition = ''; }, 400);
+            } else if (action === 'leave') {
+                chars.push(mkChar('_a', posKey));
+                _playLeaveAnim(chars[0].wrap, animName, dur);
+            } else if (action === 'move') {
+                chars.push(mkChar('_a', 'center'));
+                const toPos = POSITION_MAP_FOR_PREVIEW[posKey] || '50%';
+                chars[0].wrap.style.transition = `left ${dur}s ease-out`;
+                _playMoveAnim(chars[0].wrap, animName);
+                requestAnimationFrame(() => { chars[0].wrap.style.left = toPos; });
+                charEffectPreviewTimer = setTimeout(() => { chars[0].wrap.style.animation = ''; }, 600);
+            } else if (action === 'speak') {
+                chars.push(mkChar('_a', 'center'));
+                chars[0].sp.style.display = 'flex';
+            } else if (action === 'silence') {
+                chars.push(mkChar('_a', 'center'));
+                // 先显示波浪，然后消失
+                chars[0].sp.style.display = 'flex';
+                charEffectPreviewTimer = setTimeout(() => { chars[0].sp.style.display = 'none'; }, 500);
+            } else if (action === 'speakAll') {
+                for (let i = 0; i < ids.length; i++) {
+                    chars.push(mkChar(ids[i], 'center'));
+                    chars[i].sp.style.display = 'flex';
                 }
+                _scatterChars(chars.map(c => c.wrap), ids.length);
+            } else if (action === 'silenceAll') {
+                for (let i = 0; i < 2; i++) {
+                    chars.push(mkChar('_x' + i, 'center'));
+                    chars[i].sp.style.display = 'flex';
+                }
+                _scatterChars(chars.map(c => c.wrap), 2);
+                charEffectPreviewTimer = setTimeout(() => { chars.forEach(c => c.sp.style.display = 'none'); }, 500);
             } else if (action === 'action') {
-                const kfAct = `charAction${animName.charAt(0).toUpperCase() + animName.slice(1)}`;
-                playKF(charEl, kfAct, dur || 0.8);
-            } else if (action === 'speak' || action === 'speakAll') {
-                // 说话：显示脉冲效果
-                const w = preset.weight || 0.8;
-                charEl.style.animation = `charPulse ${(1.5 - w * 0.8).toFixed(1)}s infinite`;
-                // 说话气泡指示器
-                const bubble = document.createElement('div');
-                bubble.style.cssText = 'position:absolute;top:-12px;right:-8px;width:16px;height:16px;border-radius:50%;background:rgba(255,255,200,0.8);animation:charFlash 1s infinite;';
-                charEl.appendChild(bubble);
-                charEffectPreviewTimer = setTimeout(() => { charEl.style.animation = ''; bubble.remove(); }, 3000);
-            } else if (action === 'silence' || action === 'silenceAll') {
-                charEl.style.opacity = '0.5';
-                charEl.style.filter = 'grayscale(0.4)';
-                charEl.style.transition = 'all 0.5s ease';
-            } else if (action === 'swap') {
-                // 交换：翻转动画
-                const pos = POSITION_MAP_FOR_PREVIEW[posKey] || (charEl.style.left === '50%' ? '29%' : '50%');
-                playKF(charEl, 'charFlipMove', 0.6);
-                requestAnimationFrame(() => { charEl.style.left = pos; });
-            } else if (action === 'gather') {
-                // 聚集：角色移到目标位置
-                const pos = POSITION_MAP_FOR_PREVIEW[posKey] || '50%';
-                charEl.style.transition = `left ${dur}s ease-out, transform 0.4s ease-out`;
-                requestAnimationFrame(() => {
-                    charEl.style.left = pos;
-                    charEl.style.transform = `translateX(-50%) scale(0.9)`;
-                });
-                charEffectPreviewTimer = setTimeout(() => { charEl.style.transform = 'translateX(-50%) scale(1)'; }, dur * 1000 + 100);
-            } else if (action === 'scatter') {
-                // 散开：抖动 + 缩小
-                playKF(charEl, 'charShake', 0.5);
-                charEl.style.transition = 'transform 0.5s ease-out';
-                requestAnimationFrame(() => { charEl.style.transform = 'translateX(-50%) scale(0.85)'; });
-            } else if (action === 'order') {
-                // 排序：短暂闪烁示意
-                playKF(charEl, 'charFlash', 0.5);
-            } else if (action === 'opacity') {
-                charEl.style.opacity = preset.opacity != null ? preset.opacity : 1;
-                charEl.style.transition = 'opacity 0.4s ease';
+                chars.push(mkChar('_a', 'center'));
+                const an = animName || 'wave';
+                chars[0].wrap.classList.add(`action-${an}`);
+                chars[0].wrap.style.animation = `charAction${an.charAt(0).toUpperCase() + an.slice(1)} ${dur}s ease-out`;
+                charEffectPreviewTimer = setTimeout(() => { chars[0].wrap.style.animation = ''; chars[0].wrap.classList.remove(`action-${an}`); }, dur * 1000 + 100);
+            } else if (action === 'effect') {
+                chars.push(mkChar('_a', 'center'));
+                _playEffectAnim(chars[0].wrap, animName, dur);
+            } else if (action === 'filter') {
+                chars.push(mkChar('_a', 'center'));
+                const f = preset.filters || {};
+                const fStr = [f.brightness !== undefined ? `brightness(${f.brightness})` : '', f.saturation !== undefined ? `saturate(${f.saturation})` : '', f.contrast !== undefined ? `contrast(${f.contrast})` : ''].filter(Boolean).join(' ');
+                chars[0].wrap.style.filter = fStr;
+                chars[0].wrap.style.transition = 'filter 0.5s ease-out';
+            } else if (action === 'resetFilter') {
+                chars.push(mkChar('_a', 'center'));
+                chars[0].wrap.style.filter = 'brightness(1) saturate(1) contrast(1)';
+                chars[0].wrap.style.transition = 'filter 0.4s ease-out';
             } else if (action === 'scale') {
-                charEl.style.transition = 'transform 0.4s ease-out';
-                requestAnimationFrame(() => { charEl.style.transform = `translateX(-50%) scale(${preset.scale || 1})`; });
-            } else if (action === 'filter' || action === 'resetFilter') {
-                let fStr = '';
-                if (action === 'filter') {
-                    const f = preset.filters || {};
-                    fStr = [
-                        f.brightness !== undefined ? `brightness(${f.brightness})` : '',
-                        f.saturation !== undefined ? `saturate(${f.saturation})` : '',
-                        f.contrast !== undefined ? `contrast(${f.contrast})` : '',
-                    ].filter(Boolean).join(' ');
+                chars.push(mkChar('_a', 'center'));
+                chars[0].wrap.style.transition = 'transform 0.4s ease-out';
+                requestAnimationFrame(() => { chars[0].wrap.style.transform = `translateX(-50%) scale(${preset.scale || 1})`; });
+            } else if (action === 'opacity') {
+                chars.push(mkChar('_a', 'center'));
+                chars[0].wrap.style.opacity = preset.opacity != null ? preset.opacity : 1;
+            } else if (action === 'swap') {
+                chars.push(mkChar('_a', 'left', '👤'));
+                chars.push(mkChar('_b', 'right', '👥'));
+                const pA = POSITION_MAP_FOR_PREVIEW.right || '76%';
+                const pB = POSITION_MAP_FOR_PREVIEW.left || '24%';
+                [chars[0].wrap, chars[1].wrap].forEach(el => {
+                    el.style.transition = 'left 0.5s ease-out';
+                    el.style.animation = 'charSwap 0.5s ease-out';
+                });
+                requestAnimationFrame(() => { chars[0].wrap.style.left = pA; chars[1].wrap.style.left = pB; });
+                charEffectPreviewTimer = setTimeout(() => { chars.forEach(c => c.wrap.style.animation = ''); }, 600);
+            } else if (action === 'gather') {
+                const n = ids.length || 2;
+                for (let i = 0; i < n; i++) { chars.push(mkChar(ids[i] || '_g' + i, 'left')); }
+                const baseP = POSITION_MAP_FOR_PREVIEW[posKey] || '50%';
+                requestAnimationFrame(() => {
+                    chars.forEach((c, i) => {
+                        const offset = (i - (n - 1) / 2) * ((preset.spread || 0.15) * 100);
+                        c.wrap.style.transition = 'left 0.6s ease-out';
+                        c.wrap.style.left = `calc(${baseP} + ${offset}%)`;
+                        _playEnterAnim(c.wrap, animName, 0.6);
+                    });
+                });
+                charEffectPreviewTimer = setTimeout(() => { chars.forEach(c => c.wrap.style.animation = ''); }, 700);
+            } else if (action === 'scatter') {
+                const n = ids.length || 2;
+                for (let i = 0; i < n; i++) { chars.push(mkChar(ids[i] || '_s' + i, 'center')); }
+                _scatterChars(chars.map(c => c.wrap), n);
+                chars.forEach(c => c.wrap.style.transition = 'left 0.5s ease-out');
+                charEffectPreviewTimer = setTimeout(() => { chars.forEach(c => c.wrap.style.animation = ''); }, 600);
+            } else if (action === 'order') {
+                // 两个角色，一个遮挡另一个
+                chars.push(mkChar('_a', 'center', '👤'));
+                chars.push(mkChar('_b', 'center', '👥'));
+                chars[1].wrap.style.left = 'calc(50% + 30px)';
+                chars[1].wrap.style.zIndex = '0';
+                chars[1].wrap.style.opacity = '0.6';
+                charEffectPreviewTimer = setTimeout(() => {
+                    chars[1].wrap.style.zIndex = '2';
+                    chars[1].wrap.style.opacity = '1';
+                }, 300);
+            } else if (action === 'clearAll') {
+                for (let i = 0; i < 3; i++) {
+                    const c = mkChar('_c' + i, ['left','center','right'][i], ['👤','👥','🤖'][i]);
+                    chars.push(c);
                 }
-                charEl.style.filter = fStr;
-                charEl.style.transition = 'filter 0.5s ease-out';
+                chars.forEach(c => _playLeaveAnim(c.wrap, animName, dur));
             }
         }
 
@@ -3074,18 +3091,42 @@ createApp({
             }
         }
 
-        /** 简易位置映射（用于预览） */
+        /** 位置映射（用于预览） */
         const POSITION_MAP_FOR_PREVIEW = {
             'left-far':'17%', 'left':'29%', 'center-left':'40%',
             'center':'50%', 'center-right':'60%', 'right':'71%', 'right-far':'83%',
         };
 
-        /** 角色特效 keyframe 名称映射 */
-        function getEffectKF(name) {
-            const m = { shake:'charShake', flash:'charFlash', glow:'charGlow', float:'charFloat',
-                pulse:'charPulse', tremble:'charTremble', blur:'charBlur', highlight:'charHighlight',
-                shine:'charShine', dizzy:'charDizzy' };
-            return m[name] || `char${name.charAt(0).toUpperCase() + name.slice(1)}`;
+        // ── 预览动画辅助 ──
+        function _playEnterAnim(el, anim, d) {
+            el.style.opacity = '0';
+            requestAnimationFrame(() => {
+                const kf = { 'fade-in':'charFadeIn','slide-in-left':'charSlideInLeft','slide-in-right':'charSlideInRight','slide-in-up':'charSlideInUp','slide-in-down':'charSlideInDown','bounce-in':'charBounceIn','zoom-in':'charZoomIn','flip-in':'charFlipIn','drop-in':'charDropIn','float-in':'charFloatIn','stumble-in':'charStumbleIn','swing-in':'charSwingIn' }[anim] || 'charFadeIn';
+                el.style.animation = `${kf} ${d}s ease-out`;
+                el.style.opacity = '1';
+            });
+        }
+        function _playLeaveAnim(el, anim, d) {
+            const kf = { 'fade-out':'charFadeOut','slide-out-left':'charSlideOutLeft','slide-out-right':'charSlideOutRight','slide-out-up':'charSlideOutUp','slide-out-down':'charSlideOutDown','bounce-out':'charBounceOut','zoom-out':'charZoomOut','flip-out':'charFlipOut','shrink-out':'charShrinkOut','vanish':'charVanish' }[anim] || 'charFadeOut';
+            el.style.animation = `${kf} ${d}s ease-in forwards`;
+        }
+        function _playMoveAnim(el, anim) {
+            const kf = { 'slide-left':'charSlideLeft','slide-right':'charSlideRight','flip-move':'charFlipMove' }[anim] || '';
+            if (kf) el.style.animation = `${kf} 0.5s ease-out`;
+        }
+        function _playEffectAnim(el, anim, d) {
+            if (d === 0) { el.style.animation = `${_effectKF(anim)} 2s infinite`; }
+            else { el.style.animation = `${_effectKF(anim)} ${d}s ease-out`; }
+        }
+        function _effectKF(name) {
+            return { shake:'charShake',flash:'charFlash',glow:'charGlow',float:'charFloat',pulse:'charPulse',tremble:'charTremble',blur:'charBlur',highlight:'charHighlight',shine:'charShine',dizzy:'charDizzy' }[name] || `char${name.charAt(0).toUpperCase()+name.slice(1)}`;
+        }
+        function _scatterChars(els, n) {
+            const presets = ['left-far','left','center-left','center','center-right','right','right-far'];
+            const start = Math.floor((presets.length - n) / 2);
+            els.forEach((el, i) => {
+                el.style.left = POSITION_MAP_FOR_PREVIEW[presets[start + i]] || '50%';
+            });
         }
 
         // ── 资源包导出（含图片资源）──────────────────────────────────────
@@ -4288,7 +4329,7 @@ createApp({
             customEffects, customCharEffects,
             effectPreviewRef, effectPreviewActive, builtinEffects,
             charEffectPreviewRef, charEffectPreviewActive, builtinCharEffects, editingCharEffect,
-            ANIM_ENTER, ANIM_LEAVE, ANIM_MOVE, POSITIONS, FX_CHAR, ACTIONS,
+            ANIM_ENTER, ANIM_LEAVE, ANIM_MOVE, POSITIONS, FX_CHAR, ACTIONS, DURATIONS,
             nodeStyles, editorGroups, canvasComments,
             portDragging, portDragCurve, resizingNode,
             batchEditMode, batchCommonProps, applyBatchStyle,

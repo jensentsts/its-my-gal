@@ -2201,15 +2201,6 @@ img {
     pointer-events: none;
 }
 
-/* 角色变更 range 数值标签 */
-.ce-range-val {
-    margin-left: 8px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    min-width: 36px;
-    text-align: right;
-}
-
 /* ── 复用游戏角色动画关键帧（入场）──────────────────────────────── */
 @keyframes charFadeIn  { from { opacity:0; transform:translateX(-50%) translateY(30px); }  to { opacity:1; transform:translateX(-50%) translateY(0); } }
 @keyframes charSlideInLeft  { from { transform:translateX(-50%) translateX(120px); opacity:0; }  to { transform:translateX(-50%) translateX(0); opacity:1; } }
@@ -2264,6 +2255,12 @@ img {
 @keyframes charActionJump { 0%,100% { transform:translateX(-50%) translateY(0); } 40% { transform:translateX(-50%) translateY(-30px); } 70% { transform:translateX(-50%) translateY(-5px); } }
 @keyframes charActionFall { 0% { transform:translateX(-50%) translateY(0) rotate(0); } 100% { transform:translateX(-50%) translateY(60px) rotate(15deg); opacity:0.5; } }
 @keyframes charActionTurn { 0%,100% { transform:translateX(-50%) scaleX(1); } 50% { transform:translateX(-50%) scaleX(0); } }
+
+/* ── 说话波纹（预览用） ── */
+@keyframes charSpeakWave {
+    from { height: 4px; opacity: 0.4; }
+    to   { height: 12px; opacity: 1; }
+}
 
 /* 文本批处理提示（texts 数组） */
 .step-texts-info {
