@@ -99,6 +99,7 @@
                 <button class="tb-icon-btn tb-icon-config" data-tooltip="游戏全局设置" @click="openGameSettings">⚙️</button>
                 <button class="tb-icon-btn tb-icon-resource" data-tooltip="资源管理" @click="openResourceManager">📦</button>
                 <button class="tb-icon-btn tb-icon-warn" data-tooltip="还原原始数据" @click="resetAll">⚠️</button>
+                <button class="tb-icon-btn tb-icon-terminal" :class="{ 'terminal-active': terminalVisible }" data-tooltip="终端面板 (Ctrl+`)" @click="toggleTerminal">>_</button>
                 <a href="../index.html" class="tb-icon-btn" data-tooltip="返回游戏">🎮</a>
             </div>
             <!-- 隐藏的文件导入 input -->
@@ -1020,6 +1021,39 @@
             </div>
 
         </div><!-- /editor-main -->
+
+        <!-- ============================================================ -->
+        <!--  内置终端面板 Ctrl+` 切换                                     -->
+        <!-- ============================================================ -->
+        <div class="terminal-panel" :class="terminalPanelClass"
+             :style="terminalVisible ? { height: terminalHeight + 'px' } : {}">
+            <!-- 拖拽调整大小手柄 -->
+            <div class="terminal-resize-handle" @mousedown="onResizeStart"></div>
+            <div class="terminal-header">
+                <span class="terminal-header-label">>_ TERMINAL</span>
+                <div class="terminal-header-actions">
+                    <button class="terminal-header-btn" :class="{ 'term-btn-fullscreen-on': terminalFullscreen }"
+                            @click="toggleFullscreen" :title="terminalFullscreen ? '退出全屏' : '全屏 (保留顶栏)'">
+                        {{ terminalFullscreen ? '⤡' : '⤢' }}
+                    </button>
+                    <button class="terminal-header-btn" @click="termClear" title="清屏">⎚</button>
+                    <button class="terminal-header-btn" @click="toggleTerminal" title="关闭">✕</button>
+                </div>
+            </div>
+            <div class="terminal-output">
+                <div v-for="(line, i) in terminalLines" :key="i"
+                     class="terminal-line"
+                     :class="'term-' + line.type">{{ line.text }}</div>
+            </div>
+            <div class="terminal-input-row">
+                <span class="terminal-prompt">$</span>
+                <input class="terminal-input" v-model="terminalInput"
+                       @keydown="onTerminalKeydown"
+                       placeholder="输入 help 查看命令…"
+                       spellcheck="false" autocomplete="off" />
+            </div>
+        </div>
+
         <!-- ============================================================ -->
         <div class="global-context-menu" v-if="globalContextMenu.show"
              :style="{ left: globalContextMenu.x + 'px', top: globalContextMenu.y + 'px' }"

@@ -149,7 +149,7 @@
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
-    z-index: 300;
+    z-index: 1200;
     padding: 4px 0;
     overflow: hidden;
 }
@@ -187,7 +187,7 @@
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
-    z-index: 200;
+    z-index: 1100;
     margin-top: 4px;
 }
 .search-result-item {

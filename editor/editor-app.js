@@ -36,6 +36,7 @@ import { createViewControls } from './ui/view-controls.js';
 import { createSearch } from './ui/search.js';
 import { createPreview } from './ui/preview.js';
 import { createExportImport } from './ui/export-import.js';
+import { createTerminal } from './ui/terminal.js';
 
 const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
@@ -415,6 +416,12 @@ createApp({
         Object.assign(ops, createKeyboard(ctx, ops));
 
         // ══════════════════════════════════════════════════════════════
+        //  终端面板（在生命周期中注册全局快捷键）
+        // ══════════════════════════════════════════════════════════════
+        const terminal = createTerminal(ctx, ops);
+        Object.assign(ops, terminal);
+
+        // ══════════════════════════════════════════════════════════════
         //  11. 生命周期
         // ══════════════════════════════════════════════════════════════
         const _preventCM = e => e.preventDefault();
@@ -449,7 +456,10 @@ createApp({
             document.addEventListener('selectstart', ops.onGlobalSelectStart);
             document.addEventListener('dragstart', ops.onGlobalDragStart);
             document.addEventListener('keydown', ops.onGlobalKeyDown);
+            document.addEventListener('keydown', ops.onTerminalGlobalKeydown);
             document.title = '剧情树节点编辑器 — ' + (gameConfig.title || 'Galgame');
+            // 终端欢迎信息
+            ops.termWelcome();
         });
         watch(() => gameConfig.title, t => { document.title = '剧情树节点编辑器 — ' + (t || 'Galgame'); });
         onUnmounted(() => {
@@ -459,6 +469,7 @@ createApp({
             document.removeEventListener('selectstart', ops.onGlobalSelectStart);
             document.removeEventListener('dragstart', ops.onGlobalDragStart);
             document.removeEventListener('keydown', ops.onGlobalKeyDown);
+            document.removeEventListener('keydown', ops.onTerminalGlobalKeydown);
         });
 
         // ══════════════════════════════════════════════════════════════
@@ -491,6 +502,13 @@ createApp({
             resStepDragOver: resDrag.dragOver, resStepDrop: resDrag.drop, resStepDragEnd: resDrag.dragEnd,
             detailStepDrag: detDrag.state, detailStepDragStart: detDrag.dragStart,
             detailStepDragOver: detDrag.dragOver, detailStepDrop: detDrag.drop, detailStepDragEnd: detDrag.dragEnd,
+            // 终端面板
+            terminalVisible: terminal.terminalVisible,
+            terminalLines: terminal.terminalLines,
+            terminalInput: terminal.terminalInput,
+            terminalFullscreen: terminal.terminalFullscreen,
+            terminalHeight: terminal.terminalHeight,
+            terminalPanelClass: terminal.terminalPanelClass,
             // 所有业务函数
             ...ops,
         };
