@@ -842,6 +842,7 @@
                         <span class="ending-edit-title">{{ selectedEndingNode?.label || '结局' }}</span>
                     </h2>
                     <div class="detail-header-actions">
+                        <button class="tb-btn tb-sm" @click="locateTo('resource', selectedEndingData?.id || selectedEndingNode?.endingId, 'endings')" title="在资源管理器中定位">📦</button>
                         <button class="tb-btn tb-sm tb-danger" @click="deleteChapter" title="删除结局节点">🗑️ 删除</button>
                     </div>
                 </div>
@@ -892,6 +893,7 @@
                                @change="onChapterIdChange" placeholder="chapter_id" />
                     </h2>
                     <div class="detail-header-actions">
+                        <button class="tb-btn tb-sm" @click="locateTo('resource', selectedChapterId, 'chapters')" title="在资源管理器中定位">📦</button>
                         <button class="tb-btn tb-sm tb-danger" @click="deleteChapter" title="删除章节">🗑️ 删除章节</button>
                     </div>
                 </div>

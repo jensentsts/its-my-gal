@@ -278,6 +278,7 @@ createApp({
             globalContextMenu, editingGlobalSearch, globalSearchQuery, globalSearchInput,
             portDragging, resizingNode,
             selectedGroupId, toastMsg,
+            hoveredNodeId,
             treeNodes: treeData.treeNodes,
             treeEdges: treeData.treeEdges,
             totalChapters: treeData.totalChapters,
@@ -288,6 +289,8 @@ createApp({
             selectedEndingNode: treeData.selectedEndingNode,
             selectedEndingData: treeData.selectedEndingData,
             endingIncomingChapters: treeData.endingIncomingChapters,
+            worldStyle: treeData.worldStyle,
+            selectionBoxStyle: treeData.selectionBoxStyle,
             editingSteps, editingStep, resEditStep, resourceList, selectedResource,
             saveUndoSnapshot: undoSystem.saveUndoSnapshot,
             undoCount: undoSystem.undoCount, redoCount: undoSystem.redoCount,
@@ -327,7 +330,30 @@ createApp({
 
         /** 选中一个步骤 */
         ops.selectStep = (index) => {
+            if (ops.saveUndoSnapshot) ops.saveUndoSnapshot();
             editingStepIndex.value = index;
+        };
+
+        /** 定位到指定对象（在树中选中并聚焦，或打开资源管理器） */
+        ops.locateTo = (type, id, subId) => {
+            switch (type) {
+                case 'chapter':
+                    ops.selectNode(id);
+                    const chNode = treeData.treeNodes.value.find(n => n.id === id);
+                    if (chNode && ops.zoomToNode) ops.zoomToNode(chNode);
+                    break;
+                case 'ending':
+                    ops.selectNode(id);
+                    const enNode = treeData.treeNodes.value.find(n => n.id === id);
+                    if (enNode && ops.zoomToNode) ops.zoomToNode(enNode);
+                    break;
+                case 'resource':
+                    showResourceManager.value = true;
+                    resourceTab.value = subId || 'characters';
+                    selectedResourceId.value = id;
+                    break;
+                default: break;
+            }
         };
 
         /** 清除所有节点的框选状态 */
@@ -393,7 +419,7 @@ createApp({
         // ══════════════════════════════════════════════════════════════
         const _preventCM = e => e.preventDefault();
 
-        /** 中间键按下：画布平移（window 级别，防止子元素 .stop 拦截） */
+        /** 中间键按下：画布平移（capture 阶段监听，绕过子元素 .stop 拦截） */
         function _onMiddleMouseDown(e) {
             if (e.button !== 1) return;
             panning.active = true; panning.startX = e.clientX; panning.startY = e.clientY;
@@ -418,7 +444,7 @@ createApp({
             ops.autoLayout();
             undoSystem.saveUndoSnapshot();
             window.addEventListener('mouseup', ops.onCanvasMouseUp);
-            window.addEventListener('mousedown', _onMiddleMouseDown);
+            window.addEventListener('mousedown', _onMiddleMouseDown, true);
             document.addEventListener('contextmenu', _preventCM, true);
             document.addEventListener('selectstart', ops.onGlobalSelectStart);
             document.addEventListener('dragstart', ops.onGlobalDragStart);
@@ -428,7 +454,7 @@ createApp({
         watch(() => gameConfig.title, t => { document.title = '剧情树节点编辑器 — ' + (t || 'Galgame'); });
         onUnmounted(() => {
             window.removeEventListener('mouseup', ops.onCanvasMouseUp);
-            window.removeEventListener('mousedown', _onMiddleMouseDown);
+            window.removeEventListener('mousedown', _onMiddleMouseDown, true);
             document.removeEventListener('contextmenu', _preventCM, true);
             document.removeEventListener('selectstart', ops.onGlobalSelectStart);
             document.removeEventListener('dragstart', ops.onGlobalDragStart);
