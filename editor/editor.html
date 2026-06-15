@@ -1458,20 +1458,12 @@
                                         </div>
                                     </template>
 
-                                    <!-- ═══ update: 更新精灵 ═══ -->
+                                    <!-- ═══ update: 更新立绘 ═══ -->
                                     <template v-if="selectedResource.action === 'update'">
-                                        <div class="form-row"><label>动画</label>
-                                            <select v-model="selectedResource.animation">
-                                                <option value="">默认</option>
-                                                <option value="fade-in">fade-in</option>
-                                                <option value="bounce-in">bounce-in</option>
-                                                <option value="pulse">pulse</option>
-                                            </select>
-                                        </div>
-                                        <div class="form-row"><label>精灵ID</label>
+                                        <div class="form-row"><label>精灵 ID</label>
                                             <input type="text" v-model="selectedResource.spriteId" placeholder="default" />
                                         </div>
-                                        <div class="settings-note">更新角色立绘（精灵），可选附带动画过渡。</div>
+                                        <div class="settings-note">将角色在舞台上的立绘切换为指定精灵，用于表情/姿态变化。</div>
                                     </template>
 
                                     <!-- ═══ leave: 退场 ═══ -->
@@ -1682,7 +1674,7 @@
                                     <div class="settings-note">
                                         <strong>{{ selectedResource.name || selectedResourceId }}</strong>
                                         <span v-if="selectedResource.action === 'enter'">—— 让角色以 <em>{{ selectedResource.animation }}</em> 动画入场到 <em>{{ selectedResource.position }}</em> 位置。</span>
-                                        <span v-if="selectedResource.action === 'update'">—— 将角色立绘切换为 <em>{{ selectedResource.spriteId || '默认' }}</em>。</span>
+                                        <span v-if="selectedResource.action === 'update'">—— 切换角色立绘为 <em>{{ selectedResource.spriteId || '默认' }}</em>。</span>
                                         <span v-if="selectedResource.action === 'leave'">—— 让角色以 <em>{{ selectedResource.animation }}</em> 动画退场，持续 <em>{{ selectedResource.duration }}s</em>。</span>
                                         <span v-if="selectedResource.action === 'move'">—— 让角色移到 <em>{{ selectedResource.position }}</em>，使用 <em>{{ selectedResource.animation }}</em> 动画。</span>
                                         <span v-if="selectedResource.action === 'speak'">—— 标记角色为"说话"，音量权重 <em>{{ selectedResource.weight || 1 }}</em>。</span>

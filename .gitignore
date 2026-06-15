@@ -10,6 +10,9 @@ Desktop.ini
 *.swo
 *~
 
+# Claude Code
+.claude/
+
 # Node (if applicable)
 node_modules/
 npm-debug.log*
@@ -24,3 +27,13 @@ resource-packs/*.zip
 # Temp files
 *.tmp
 *.log
+
+# Environment / Secrets (API keys, tokens, credentials)
+.env
+.env.*
+*.key
+*.pem
+*.cert
+credentials.json
+secrets.*
+config.local.*

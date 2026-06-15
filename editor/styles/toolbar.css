@@ -1,0 +1,209 @@
+/**
+ * editor/styles/toolbar.css
+ *
+ * 编辑器顶部工具栏、全局搜索、工具栏子菜单
+ * ==================================================================== */
+
+/* ── 工具栏容器 ── */
+.editor-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    gap: 12px;
+    flex-shrink: 0;
+    z-index: 10;
+}
+
+.toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.toolbar-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent-green-bright);
+    white-space: nowrap;
+}
+
+.toolbar-subtitle {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.toolbar-center {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── 按钮 ── */
+.tb-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tb-btn:hover { background: var(--bg-surface); border-color: var(--border-active); }
+.tb-btn:active { background: #2a2a40; }
+
+.tb-export { border-color: var(--accent-green); }
+.tb-export:hover { background: #1a3a1a; }
+
+.tb-warn { border-color: var(--accent-yellow); color: var(--accent-yellow); }
+.tb-warn:hover { background: #2a2a1a; }
+
+.tb-back { border-color: var(--accent-blue); }
+.tb-back:hover { background: #1a2a3a; }
+
+.tb-pack { border-color: #8e44ad; color: #c39bdb; }
+.tb-pack:hover { background: #2a1a3a; }
+
+.tb-sync { border-color: var(--accent-green-bright); color: var(--accent-green-bright); }
+.tb-sync:hover { background: #1a3a1a; }
+
+.tb-config { border-color: #60a0c0; color: #80c0e0; }
+.tb-config:hover { background: #1a2a3a; }
+
+.tb-sm { padding: 3px 8px; font-size: 12px; }
+
+.tb-danger { border-color: var(--accent-red); color: var(--accent-red); }
+.tb-danger:hover { background: #3a1a1a; }
+
+.tb-btn.tb-xs {
+    font-size: 11px;
+    padding: 0 4px;
+    line-height: 1.6;
+    min-width: 20px;
+}
+
+/* ── 图标按钮 ── */
+.tb-icon-btn {
+    width: 32px; height: 32px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    text-decoration: none;
+    flex-shrink: 0;
+}
+.tb-icon-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-color); }
+.tb-icon-btn.tb-icon-sync:hover { color: var(--accent-green-bright); }
+.tb-icon-btn.tb-icon-config:hover { color: #80c0e0; }
+.tb-icon-btn.tb-icon-resource:hover { color: #80e080; }
+.tb-icon-btn.tb-icon-warn:hover { color: var(--accent-yellow); }
+.tb-icon-btn.tb-disabled { opacity: 0.35; pointer-events: none; cursor: default; }
+.toolbar-sep { width: 1px; height: 20px; background: var(--border-color); margin: 0 4px; flex-shrink: 0; }
+
+/* ── 居中标题 ── */
+.toolbar-center { flex: 1; display: flex; justify-content: center; position: relative; }
+.toolbar-game-title { position: relative; }
+.game-title-text {
+    font-size: 15px; font-weight: 700;
+    color: var(--accent-green-bright);
+    cursor: default;
+    user-select: none;
+    padding: 4px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+.game-title-text:hover { border-color: var(--border-color); }
+
+/* ── 工具栏子菜单 ── */
+.toolbar-submenu-wrap { position: relative; }
+.toolbar-submenu {
+    position: absolute;
+    top: 100%; left: 0;
+    margin-top: 4px;
+    min-width: 170px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 300;
+    padding: 4px 0;
+    overflow: hidden;
+}
+.submenu-item {
+    padding: 8px 14px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.1s;
+}
+.submenu-item:hover { background: var(--bg-tertiary); color: var(--accent-green-bright); }
+
+/* ── 全局搜索 ── */
+.global-search-input {
+    width: 320px;
+    padding: 4px 12px;
+    border: 1px solid var(--accent-green);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    outline: none;
+}
+
+.global-search-dropdown {
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translateX(-50%);
+    min-width: 320px;
+    max-height: 280px;
+    overflow-y: auto;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 200;
+    margin-top: 4px;
+}
+.search-result-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.1s;
+}
+.search-result-item:hover { background: var(--bg-tertiary); }
+.search-result-icon { font-size: 14px; flex-shrink: 0; }
+.search-result-label { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-result-type { font-size: 10px; color: var(--text-dim); padding: 1px 6px; background: var(--bg-tertiary); border-radius: 3px; flex-shrink: 0; }
+.search-no-results { padding: 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
+
+/* ── 资源管理按钮 ── */
+.tb-resource { border-color: #60c060; color: #80e080; }
+.tb-resource:hover { background: #1a3a1a; }

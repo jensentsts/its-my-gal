@@ -1,0 +1,96 @@
+/**
+ * editor/styles/modals.css
+ *
+ * 弹窗覆盖层、导出弹窗、设置弹窗
+ * ==================================================================== */
+
+/* ── 弹窗遮罩 ── */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+}
+
+.modal-content {
+    width: 700px;
+    max-width: 90vw;
+    max-height: 80vh;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 { font-size: 16px; }
+
+.close-btn {
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.close-btn:hover { background: var(--bg-surface); color: var(--text-primary); }
+
+.modal-body {
+    flex: 1;
+    padding: 12px;
+    overflow: hidden;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+/* ── 导出弹窗 ── */
+.export-textarea {
+    width: 100%;
+    height: 100%;
+    min-height: 400px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.export-textarea:focus { outline: none; }
+
+/* ── 资源管理弹窗（宽屏） ── */
+.modal-resource {
+    width: 90vw;
+    max-width: 1200px;
+    height: 82vh;
+}
+
+.resource-body {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1;
+}
