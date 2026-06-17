@@ -23,6 +23,10 @@ build/
 
 # Resource packs (generated)
 resource-packs/*.zip
+game-export*.zip
+
+# Package-level node_modules (monorepo)
+packages/*/node_modules/
 
 # Temp files
 *.tmp
