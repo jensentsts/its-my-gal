@@ -99,7 +99,7 @@
                 <button class="tb-icon-btn tb-icon-config" data-tooltip="游戏全局设置" @click="openGameSettings">⚙️</button>
                 <button class="tb-icon-btn tb-icon-resource" data-tooltip="资源管理" @click="openResourceManager">📦</button>
                 <button class="tb-icon-btn tb-icon-warn" data-tooltip="还原原始数据" @click="resetAll">⚠️</button>
-                <button class="tb-icon-btn tb-icon-terminal" :class="{ 'terminal-active': terminalVisible }" data-tooltip="终端面板 (Ctrl+`)" @click="toggleTerminal">>_</button>
+                <button class="tb-icon-btn tb-icon-terminal" :class="{ 'terminal-active': terminalVisible }" data-tooltip="终端面板 (/ 或 Ctrl+`)" @click="toggleTerminal">>_</button>
                 <a href="../index.html" class="tb-icon-btn" data-tooltip="返回游戏">🎮</a>
             </div>
             <!-- 隐藏的文件导入 input -->
@@ -1047,10 +1047,10 @@
             </div>
             <div class="terminal-input-row">
                 <span class="terminal-prompt">$</span>
-                <input class="terminal-input" v-model="terminalInput"
+                <textarea class="terminal-input" v-model="terminalInput"
                        @keydown="onTerminalKeydown"
                        placeholder="输入 help 查看命令…"
-                       spellcheck="false" autocomplete="off" />
+                       spellcheck="false" autocomplete="off" rows="1"></textarea>
             </div>
         </div>
 
