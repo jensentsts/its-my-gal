@@ -11,8 +11,8 @@
  *   utils/    — 工具函数
  */
 
-import * as GameData from '../resource-packs/default/index.js';
-import { ResourcePathResolver } from '../engine/index.js';
+import * as GameData from '../../resource-packs/default/index.js';
+import { ResourcePathResolver } from '@galgame/engine';
 import { analyzeTree, computeLayout, computeEndingLayout, computeEdgePath } from './tree-layout.js';
 import { clone, uid } from './helpers.js';
 import {

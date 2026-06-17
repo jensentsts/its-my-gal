@@ -3,8 +3,8 @@
  */
 import { clone, uid, formatJS } from '../helpers.js';
 import { stepTextBrief } from '../step-utils.js';
-import * as GameData from '../../resource-packs/default/index.js';
-import { validatePackStructure, validatePackData } from '../../engine/index.js';
+import * as GameData from '../../../resource-packs/default/index.js';
+import { validatePackStructure, validatePackData } from '@galgame/engine';
 
 export function createExportImport(ctx, ops) {
     const { chapters, chapterDescriptions, entryPoints, gameConfig, gameCharacters, gameScenes, gameCgLibrary, gameItems, gameEndings, nodePositions, nodeStyles, editorGroups, showExportModal, exportContent, exportModalTitle, customEffects } = ctx;

@@ -3,7 +3,7 @@
  */
 import { clone } from '../helpers.js';
 import { builtinCharEffects, builtinEffects, POSITION_MAP_FOR_PREVIEW } from '../step-utils.js';
-import { EffectsManager } from '../../engine/index.js';
+import { EffectsManager } from '@galgame/engine';
 
 const { watch: _watch } = Vue;
 

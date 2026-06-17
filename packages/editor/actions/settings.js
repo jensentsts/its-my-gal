@@ -1,7 +1,7 @@
 /**
  * editor/actions/settings.js —— 游戏设置 / 同步 / 校验 / 入口点
  */
-import * as GameData from '../../resource-packs/default/index.js';
+import * as GameData from '../../../resource-packs/default/index.js';
 
 export function createSettings(ctx, ops) {
     const { gameConfig, gameCharacters, gameScenes, gameCgLibrary, gameItems, gameEndings, chapters, entryPoints, chapterDescriptions, nodePositions, nodeStyles, editorGroups, editableGameConfig, editableHomeConfig, showGameSettings, editorPathResolver } = ctx;
