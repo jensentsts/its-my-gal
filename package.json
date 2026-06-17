@@ -5,12 +5,12 @@
   "type": "module",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "projects/*"
   ],
   "scripts": {
-    "cli": "node packages/editor/cli.js",
-    "validate": "node packages/editor/cli.js validate",
-    "list": "node packages/editor/cli.js list",
-    "export": "node packages/editor/cli.js export"
+    "cli": "node projects/editor/cli.js",
+    "validate": "node projects/editor/cli.js validate",
+    "list": "node projects/editor/cli.js list",
+    "export": "node projects/editor/cli.js export"
   }
 }

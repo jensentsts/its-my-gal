@@ -10,7 +10,7 @@
     <script type="importmap">
     {
       "imports": {
-        "@galgame/engine": "packages/engine/index.js"
+        "@galgame/engine": "projects/engine/index.js"
       }
     }
     </script>
@@ -22,7 +22,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <!-- 编辑器样式 -->
-    <link rel="stylesheet" href="packages/editor/editor-styles.css">
+    <link rel="stylesheet" href="projects/editor/editor-styles.css">
 </head>
 <body>
     <!-- 全局 datalist 供搜索式下拉补全使用 -->
@@ -110,7 +110,7 @@
                 <button class="tb-icon-btn tb-icon-resource" data-tooltip="资源管理" @click="openResourceManager">📦</button>
                 <button class="tb-icon-btn tb-icon-warn" data-tooltip="还原原始数据" @click="resetAll">⚠️</button>
                 <button class="tb-icon-btn tb-icon-terminal" :class="{ 'terminal-active': terminalVisible }" data-tooltip="终端面板 (/ 或 Ctrl+`)" @click="toggleTerminal">>_</button>
-                <a href="../game/index.html" class="tb-icon-btn" data-tooltip="返回游戏">🎮</a>
+                <a href="projects/game/index.html" class="tb-icon-btn" data-tooltip="返回游戏">🎮</a>
             </div>
             <!-- 隐藏的文件导入 input -->
             <input type="file" id="pack-import-input" accept=".zip" style="display:none"
@@ -2404,6 +2404,6 @@
     </div>
 
     <!-- 编辑器应用入口 -->
-    <script type="module" src="packages/editor/editor-app.js"></script>
+    <script type="module" src="projects/editor/editor-app.js"></script>
 </body>
 </html>

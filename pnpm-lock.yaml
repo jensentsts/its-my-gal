@@ -1,0 +1,23 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+
+  packages/editor:
+    dependencies:
+      '@galgame/engine':
+        specifier: workspace:*
+        version: link:../engine
+
+  packages/engine: {}
+
+  packages/game:
+    dependencies:
+      '@galgame/engine':
+        specifier: workspace:*
+        version: link:../engine
