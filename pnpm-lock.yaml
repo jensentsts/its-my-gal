@@ -8,15 +8,15 @@ importers:
 
   .: {}
 
-  packages/editor:
+  projects/editor:
     dependencies:
       '@galgame/engine':
         specifier: workspace:*
         version: link:../engine
 
-  packages/engine: {}
+  projects/engine: {}
 
-  packages/game:
+  projects/game:
     dependencies:
       '@galgame/engine':
         specifier: workspace:*
