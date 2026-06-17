@@ -1,0 +1,13 @@
+{
+  "name": "@galgame/game",
+  "version": "1.0.0",
+  "description": "Galgame visual novel shell - 幻象物语：阿瓦隆之觉醒",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@galgame/engine": "workspace:*"
+  },
+  "scripts": {
+    "start": "npx http-server . -p 8080 -c-1 --cors"
+  }
+}

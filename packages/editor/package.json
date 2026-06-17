@@ -1,0 +1,20 @@
+{
+  "name": "@galgame/editor",
+  "version": "1.0.0",
+  "description": "Story tree editor and CLI tools for GalEngine",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "galgame-editor": "./cli.js"
+  },
+  "dependencies": {
+    "@galgame/engine": "workspace:*"
+  },
+  "scripts": {
+    "cli": "node cli.js",
+    "validate": "node cli.js validate",
+    "list": "node cli.js list",
+    "export": "node cli.js export",
+    "start": "npx http-server . -p 8081 -c-1 --cors"
+  }
+}

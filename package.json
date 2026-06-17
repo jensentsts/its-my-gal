@@ -1,13 +1,16 @@
 {
-  "name": "galgame-editor",
+  "name": "galgame-monorepo",
   "version": "1.0.0",
-  "description": "幻象物语：阿瓦隆之觉醒 — 剧情树节点编辑器及 CLI 工具",
+  "description": "幻象物语：阿瓦隆之觉醒 — Monorepo",
   "type": "module",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "cli": "node editor/cli.js",
-    "validate": "node editor/cli.js validate",
-    "list": "node editor/cli.js list",
-    "export": "node editor/cli.js export"
-  },
-  "private": true
+    "cli": "node packages/editor/cli.js",
+    "validate": "node packages/editor/cli.js validate",
+    "list": "node packages/editor/cli.js list",
+    "export": "node packages/editor/cli.js export"
+  }
 }

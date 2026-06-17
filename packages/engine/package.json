@@ -1,0 +1,20 @@
+{
+  "name": "@galgame/engine",
+  "version": "0.1.2",
+  "description": "GalEngine - Framework-agnostic visual novel engine core",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./*": "./*"
+  },
+  "files": [
+    "core/",
+    "effects/",
+    "resource/",
+    "storage/",
+    "story/",
+    "index.js"
+  ],
+  "private": true
+}
