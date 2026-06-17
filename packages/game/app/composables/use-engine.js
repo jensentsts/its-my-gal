@@ -18,7 +18,7 @@ import { GalEngine, EffectsManager, ResourceManager,
          ChapterLoader,
          extractBranchPoints,
          rankNextChapters,
-         ResourcePathResolver } from '../../engine/index.js';
+         ResourcePathResolver } from '@galgame/engine';
 export function useEngine() {
     // ---- 引擎实例 ----
     const engine = Vue.ref(null);

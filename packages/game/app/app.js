@@ -15,14 +15,14 @@
  */
 
 // 静态导入回退数据
-import * as GameData from '../resource-packs/default/index.js';
+import * as GameData from '../../../resource-packs/default/index.js';
 import { useEngine } from './composables/use-engine.js';
 import { useScale }  from './composables/use-scale.js';
 import { useToast }  from './composables/use-toast.js';
 import { useKeybindings } from './composables/use-keybindings.js';
 import { useSettings }   from './composables/use-settings.js';
 import { useVueFocus } from './composables/use-vue-focus.js';
-import { getDynamicItemDescription as getDynamicDesc, getItemIcon, getItemImage, getItemName } from '../engine/index.js';
+import { getDynamicItemDescription as getDynamicDesc, getItemIcon, getItemImage, getItemName } from '@galgame/engine';
 
 const { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 

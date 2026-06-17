@@ -6,7 +6,17 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
+    <base href="../../">
     <title>Galgame</title>
+
+    <!-- Import map for package resolution -->
+    <script type="importmap">
+    {
+      "imports": {
+        "@galgame/engine": "packages/engine/index.js"
+      }
+    }
+    </script>
 
     <!-- Vue 3 CDN -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
@@ -15,10 +25,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <!-- 样式表（按层级加载） -->
-    <link rel="stylesheet" href="app/styles/base.css">
-    <link rel="stylesheet" href="app/styles/effects.css">
-    <link rel="stylesheet" href="app/styles/game.css">
-    <link rel="stylesheet" href="app/styles/menu.css">
+    <link rel="stylesheet" href="packages/game/app/styles/base.css">
+    <link rel="stylesheet" href="packages/game/app/styles/effects.css">
+    <link rel="stylesheet" href="packages/game/app/styles/game.css">
+    <link rel="stylesheet" href="packages/game/app/styles/menu.css">
 
     <script>
     // 阻止旧版缓存/扩展注入的内容脚本干扰
@@ -674,6 +684,6 @@
     </div>
 
     <!-- 应用入口（ES Module） -->
-    <script type="module" src="app/app.js"></script>
+    <script type="module" src="packages/game/app/app.js"></script>
 </body>
 </html>
