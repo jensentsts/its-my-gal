@@ -932,7 +932,10 @@ export class GalEngine extends EventEmitter {
                         ...existing,
                         spriteId: ch.spriteId || existing.spriteId,
                         url: url || existing.url,
-                        animation: this._normalizeAnimation(ch.animation || existing.animation || ''),
+                        // 只保留显式指定的 animation，避免用空字符串覆盖已有动画
+                        animation: ch.animation
+                            ? this._normalizeAnimation(ch.animation)
+                            : existing.animation,
                     });
                 }
                 break;

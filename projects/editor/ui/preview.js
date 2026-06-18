@@ -3,7 +3,7 @@
  */
 import { clone } from '../helpers.js';
 import { builtinCharEffects, builtinEffects, POSITION_MAP_FOR_PREVIEW } from '../step-utils.js';
-import { EffectsManager } from '@galgame/engine';
+import { EffectsManager } from '../../engine/index.js';
 
 const { watch: _watch } = Vue;
 
@@ -204,7 +204,10 @@ export function createPreview(ctx, ops) {
         if (kf) el.style.animation = `${kf} 0.5s ease-out`;
     }
     function _playEffectAnim(el, anim, d) {
-        el.style.animation = `${_effectKF(anim)} ${d === 0 ? '2s infinite' : d + 's ease-out'}`;
+        // 非无限特效用 duration（默认 0.5s），无限特效（glow/float/pulse/tremble/shine/dizzy）用 2s infinite
+        const infiniteEffects = ['glow','float','pulse','tremble','shine','dizzy'];
+        const isInfinite = infiniteEffects.includes(anim) || d <= 0;
+        el.style.animation = `${_effectKF(anim)} ${isInfinite ? '2s infinite' : (d || 0.5) + 's ease-out'}`;
     }
     function _effectKF(name) {
         return { shake:'charShake',flash:'charFlash',glow:'charGlow',float:'charFloat',pulse:'charPulse',tremble:'charTremble',blur:'charBlur',highlight:'charHighlight',shine:'charShine',dizzy:'charDizzy' }[name] || `char${name.charAt(0).toUpperCase()+name.slice(1)}`;

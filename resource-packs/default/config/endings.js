@@ -43,5 +43,10 @@ export const ENDINGS = [
     "id": "true_end",
     "title": "TRUE END: 阿瓦隆的新晨",
     "description": "成功的将古老魔晶带回。破晓的曙光撕裂了笼罩数百年的迷雾，世界迎来了久违的平静与真相。"
+  },
+  {
+    "id": "demo_complete",
+    "title": "DEMO END: 演示完成",
+    "description": "这是一个用于演示增强型 DSL 功能（角色入场、表情切换、动画、特效、滤镜、位置交换、聚集等）的结局节点，仅供测试使用。"
   }
 ];

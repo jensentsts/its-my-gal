@@ -12,7 +12,7 @@
  */
 
 import * as GameData from '../../resource-packs/default/index.js';
-import { ResourcePathResolver } from '@galgame/engine';
+import { ResourcePathResolver } from '../engine/index.js';
 import { analyzeTree, computeLayout, computeEndingLayout, computeEdgePath } from './tree-layout.js';
 import { clone, uid } from './helpers.js';
 import {
@@ -398,6 +398,19 @@ createApp({
             port.targetId = newTargetId;
             port.isEnding = newTargetId.startsWith('_end_');
             ops.showToast(`跳转目标已更新 → ${newTargetId}`);
+        };
+
+        /** 自动创建缺失的结局数据（当选中一个在 gameEndings 中不存在的结局节点时） */
+        ops.createMissingEnding = () => {
+            const node = treeData.selectedEndingNode.value;
+            if (!node || !node.endingId) return;
+            const id = node.endingId;
+            if (gameEndings.find(e => e.id === id)) {
+                ops.showToast('✅ 结局数据已存在');
+                return;
+            }
+            gameEndings.push({ id, title: id, description: '' });
+            ops.showToast(`✅ 已自动创建缺失结局「${id}」`);
         };
 
         // ══════════════════════════════════════════════════════════════

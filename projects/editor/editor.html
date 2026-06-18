@@ -6,15 +6,6 @@
     <base href="../../">
     <title>剧情树节点编辑器</title>
 
-    <!-- Import map for package resolution -->
-    <script type="importmap">
-    {
-      "imports": {
-        "@galgame/engine": "projects/engine/index.js"
-      }
-    }
-    </script>
-
     <!-- Vue 3 CDN -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 
@@ -858,28 +849,41 @@
                     </div>
                 </div>
                 <div class="detail-body">
-                    <div class="section-label">🎬 结局信息</div>
-                    <div class="chapter-info-bar">
-                        <span v-if="selectedEndingNode">被引用：<strong>{{ selectedEndingNode.incoming }}</strong> 次</span>
+                    <!-- ⚠ 缺失结局数据：自动检测 + 修复 -->
+                    <div v-if="!selectedEndingData" class="missing-ending-fix">
+                        <div class="warn-banner">⚠️ 结局「{{ selectedEndingNode?.endingId }}」在结局配置（endings.js）中不存在</div>
+                        <p class="missing-ending-desc">该结局节点已被章节引用，但未在结局配置中定义对应的数据条目。点击下方按钮自动创建：</p>
+                        <button class="tb-btn tb-btn-create" @click="createMissingEnding">
+                            ✅ 自动创建结局数据
+                        </button>
                     </div>
-                    <div class="form-row">
-                        <label>结局 ID</label>
-                        <div class="rename-row">
-                            <input type="text" v-model="selectedEndingData._renameId"
-                                   :placeholder="selectedEndingData?.id || selectedEndingNode?.endingId" />
-                            <button class="tb-btn tb-sm" @click="renameResource('endings', selectedEndingData?.id || selectedEndingNode?.endingId)">
-                                ↻ 重命名
-                            </button>
+
+                    <!-- 结局编辑表单（仅当数据存在时显示） -->
+                    <template v-if="selectedEndingData">
+                        <div class="section-label">🎬 结局信息</div>
+                        <div class="chapter-info-bar">
+                            <span v-if="selectedEndingNode">被引用：<strong>{{ selectedEndingNode.incoming }}</strong> 次</span>
                         </div>
-                    </div>
-                    <div class="form-row">
-                        <label>结局标题</label>
-                        <input type="text" v-model="selectedEndingData.title" placeholder="结局标题" />
-                    </div>
-                    <div class="form-row">
-                        <label>结局描述</label>
-                        <textarea v-model="selectedEndingData.description" rows="4" placeholder="结局描述..."></textarea>
-                    </div>
+                        <div class="form-row">
+                            <label>结局 ID</label>
+                            <div class="rename-row">
+                                <input type="text" v-model="selectedEndingData._renameId"
+                                       :placeholder="selectedEndingData?.id || selectedEndingNode?.endingId" />
+                                <button class="tb-btn tb-sm" @click="renameResource('endings', selectedEndingData?.id || selectedEndingNode?.endingId)">
+                                    ↻ 重命名
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <label>结局标题</label>
+                            <input type="text" v-model="selectedEndingData.title" placeholder="结局标题" />
+                        </div>
+                        <div class="form-row">
+                            <label>结局描述</label>
+                            <textarea v-model="selectedEndingData.description" rows="4" placeholder="结局描述..."></textarea>
+                        </div>
+                    </template>
+
                     <div class="section-label">🔗 来源章节</div>
                     <div class="resource-list-items" style="max-height:180px;overflow-y:auto">
                         <div v-for="src in endingIncomingChapters" :key="src.id + (src.stepIdx || 0)"

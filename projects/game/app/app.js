@@ -22,7 +22,7 @@ import { useToast }  from './composables/use-toast.js';
 import { useKeybindings } from './composables/use-keybindings.js';
 import { useSettings }   from './composables/use-settings.js';
 import { useVueFocus } from './composables/use-vue-focus.js';
-import { getDynamicItemDescription as getDynamicDesc, getItemIcon, getItemImage, getItemName } from '@galgame/engine';
+import { getDynamicItemDescription as getDynamicDesc, getItemIcon, getItemImage, getItemName } from '../../engine/index.js';
 
 const { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
@@ -798,6 +798,8 @@ createApp({
             'charShrinkOut', 'charVanish',
             'charSwap',
             'charSlideLeft', 'charSlideRight', 'charFlipMove',
+            // 有限时长的角色视觉特效（非 infinite 类）
+            'charShake', 'charFlash', 'charBlur', 'charHighlight',
         ]);
 
         function onCharacterAnimationEnd(state, event) {

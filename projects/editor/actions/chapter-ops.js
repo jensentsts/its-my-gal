@@ -314,9 +314,14 @@ export function createChapterOps(ctx, ops) {
             cc => cc.id || cc.ids || cc.id1 || cc.action === 'clearAll' || cc.action === 'silenceAll'
         );
         if (valid.length > 0) {
+            const allowedFields = _ALLOWED_FIELDS_BY_ACTION;
             editingStep.value.characterChanges = valid.map(cc => {
+                const actionAllowed = allowedFields[cc.action];
                 const entry = { action: cc.action };
                 for (const field of CHAR_CHANGE_FIELDS) {
+                    // ★ 跳过该 action 不相关的字段
+                    if (actionAllowed && !actionAllowed.includes(field)) continue;
+
                     let val = cc[field];
                     if (val === undefined || val === null || val === '') continue;
                     if (Array.isArray(val) && val.length === 0) continue;
@@ -346,6 +351,31 @@ export function createChapterOps(ctx, ops) {
         }
         syncCharChangesToStep();
     }
+
+    /**
+     * 各 action 允许的有效字段映射（用于序列化时排除无关字段）
+     */
+    const _ALLOWED_FIELDS_BY_ACTION = {
+        enter:       ['id','spriteId','animation','position','scale','opacity','filters','speak','weight','offsetX','offsetY','groupId','sfx','order'],
+        update:      ['id','spriteId','animation'],
+        leave:       ['id','animation','duration'],
+        move:        ['id','position','animation','offsetX','offsetY'],
+        speak:       ['id','weight','animation'],
+        silence:     ['id'],
+        speakAll:    ['ids','weights'],
+        silenceAll:  [],
+        action:      ['id','actionId','duration'],
+        effect:      ['id','effect','duration'],
+        filter:      ['id','filters'],
+        resetFilter: ['id'],
+        scale:       ['id','scale','animation'],
+        opacity:     ['id','opacity','animation'],
+        swap:        ['id1','id2'],
+        gather:      ['ids','position','spread','animation','spriteId','scale','opacity'],
+        scatter:     ['ids','animation'],
+        order:       ['ids'],
+        clearAll:    ['animation','duration'],
+    };
 
     function toggleEffect(effect) {
         if (isStepEditLocked(editingStep.value)) return;
@@ -470,9 +500,14 @@ export function createChapterOps(ctx, ops) {
             cc => cc.id || cc.ids || cc.id1 || cc.action === 'clearAll' || cc.action === 'silenceAll'
         );
         if (valid.length > 0) {
+            const allowedFields = _ALLOWED_FIELDS_BY_ACTION;
             step.characterChanges = valid.map(cc => {
+                const actionAllowed = allowedFields[cc.action];
                 const entry = { action: cc.action };
                 for (const field of CHAR_CHANGE_FIELDS) {
+                    // ★ 跳过该 action 不相关的字段
+                    if (actionAllowed && !actionAllowed.includes(field)) continue;
+
                     let val = cc[field];
                     if (val === undefined || val === null || val === '') continue;
                     if (Array.isArray(val) && val.length === 0) continue;

@@ -43,11 +43,41 @@ export function createSettings(ctx, ops) {
 
     async function validateEditorResources() {
         const data = { CHARACTERS: gameCharacters, SCENES: gameScenes, CG_LIBRARY: gameCgLibrary, HOME_CONFIG: gameConfig?.home || gameConfig };
+        const missing = [];
         try {
             const result = await editorPathResolver.validateAll(data);
-            if (result.ok) showToast('✅ 所有资源文件完整，共检查 ' + result.missing.length + ' 项');
-            else { showToast(`⚠️ 发现 ${result.missing.length} 个缺失资源（控制台查看详情）`); console.warn('缺失资源列表:\n' + result.missing.map(m => `  · [${m.type}] ${m.path}`).join('\n')); }
-        } catch (e) { showToast('❌ 校验过程异常: ' + e.message); }
+            if (!result.ok) missing.push(...result.missing.map(m => `[${m.type}] ${m.path}`));
+        } catch (e) { showToast('❌ 校验过程异常: ' + e.message); return; }
+
+        // 扫描所有章节中引用的结局 ID，检查是否在 gameEndings 中定义
+        const definedEndingIds = new Set(gameEndings.map(e => e.id));
+        const missingEndingIds = new Set();
+        for (const [cid, steps] of Object.entries(chapters)) {
+            for (const step of steps) {
+                if (step.type === 'ending' && step.endingId && !definedEndingIds.has(step.endingId)) {
+                    missingEndingIds.add(step.endingId);
+                }
+                if (step.type === 'jump' && step.endingId && !definedEndingIds.has(step.endingId)) {
+                    missingEndingIds.add(step.endingId);
+                }
+                if (step.type === 'choice' && step.choices) {
+                    for (const ch of step.choices) {
+                        if (ch.jumpChapter && ch.jumpChapter.startsWith('_end_')) {
+                            const eid = ch.jumpChapter.slice(5);
+                            if (!definedEndingIds.has(eid)) missingEndingIds.add(eid);
+                        }
+                    }
+                }
+            }
+        }
+        if (missingEndingIds.size > 0) {
+            for (const eid of missingEndingIds) {
+                missing.push(`[结局] "${eid}" 被章节引用但未在 endings.js 中定义`);
+            }
+        }
+
+        if (missing.length === 0) showToast('✅ 所有资源完整，结局引用均有效，共检查 ' + (result?.ok ? result.missing.length : 0) + ' 项');
+        else { showToast(`⚠️ 发现 ${missing.length} 个问题（控制台查看详情）`); console.warn('资源校验问题列表:\n' + missing.map(m => `  · ${m}`).join('\n')); }
     }
 
     function syncToGame() {
