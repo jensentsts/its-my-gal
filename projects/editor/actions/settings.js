@@ -8,6 +8,10 @@ export function createSettings(ctx, ops) {
     const { showToast, autoLayout } = ops;
 
     function openGameSettings() {
+        if (showGameSettings.value) {
+            showGameSettings.value = false;
+            return;
+        }
         editableGameConfig.title = gameConfig.title || '';
         editableGameConfig.aspectWidth = gameConfig.aspectRatio?.width || 1280;
         editableGameConfig.aspectHeight = gameConfig.aspectRatio?.height || 720;
@@ -76,8 +80,19 @@ export function createSettings(ctx, ops) {
             }
         }
 
-        if (missing.length === 0) showToast('✅ 所有资源完整，结局引用均有效，共检查 ' + (result?.ok ? result.missing.length : 0) + ' 项');
-        else { showToast(`⚠️ 发现 ${missing.length} 个问题（控制台查看详情）`); console.warn('资源校验问题列表:\n' + missing.map(m => `  · ${m}`).join('\n')); }
+        if (missing.length === 0) {
+            showToast('✅ 所有资源完整，结局引用均有效，共检查 ' + (result?.ok ? result.missing.length : 0) + ' 项');
+            if (ops.termOut) ops.termOut('✅ 资源完整性校验通过', 'system');
+        }
+        else {
+            showToast(`⚠️ 发现 ${missing.length} 个问题（控制台查看详情）`);
+            console.warn('资源校验问题列表:\n' + missing.map(m => `  · ${m}`).join('\n'));
+            if (ops.termOut) {
+                ops.termOut(`⚠️ 资源校验发现 ${missing.length} 个问题:`, 'error');
+                for (const m of missing) ops.termOut(`  · ${m}`, 'error');
+                ops.termOut('', 'system');
+            }
+        }
     }
 
     function syncToGame() {

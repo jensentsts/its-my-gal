@@ -23,7 +23,8 @@ export function createContextMenu(ctx, ops) {
         contextMenu.show = true; contextMenu.nodeId = node.id; contextMenu.groupId = null;
         const rect = treePanel.value.getBoundingClientRect();
         contextMenu.x = e.clientX - rect.left; contextMenu.y = e.clientY - rect.top;
-        Object.assign(contextMenu, screenToWorld(contextMenu.x, contextMenu.y, panX.value, panY.value, viewScale.value));
+        const wp = screenToWorld(contextMenu.x, contextMenu.y, panX.value, panY.value, viewScale.value);
+        contextMenu.worldX = wp.x; contextMenu.worldY = wp.y;
     }
 
     function onGroupContextMenu(e, groupId) {

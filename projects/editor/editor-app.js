@@ -37,6 +37,7 @@ import { createSearch } from './ui/search.js';
 import { createPreview } from './ui/preview.js';
 import { createExportImport } from './ui/export-import.js';
 import { createTerminal } from './ui/terminal.js';
+import { createWindowManager } from './ui/window-manager.js';
 
 const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
@@ -83,10 +84,13 @@ createApp({
         const selection = reactive({ active:false, startX:0, startY:0, endX:0, endY:0 });
         const selectedNodeIds = reactive({});
         const contextMenu = reactive({ show:false, x:0, y:0, nodeId:null, groupId:null, worldX:0, worldY:0 });
-        const showGameSettings = ref(false);
+        // 窗口管理器（取代旧有的模态弹窗系统）
+        const windowManager = createWindowManager();
+        const showGameSettings = windowManager.compat.gameSettings;
+        const showResourceManager = windowManager.compat.resourceManager;
+
         const editableHomeConfig = reactive({ panelBgUrl:GameData.HOME_CONFIG?.panelBackground?.url||'', panelOverlayColor:GameData.HOME_CONFIG?.panelBackground?.overlayColor||'rgba(4,4,10,0.88)', panelOverlayGradient:GameData.HOME_CONFIG?.panelBackground?.overlayGradient||'' });
         const editableGameConfig = reactive({ title:gameConfig.title||'', aspectWidth:gameConfig.aspectRatio?.width||1280, aspectHeight:gameConfig.aspectRatio?.height||720, textSpeed:gameConfig.textSpeed||25 });
-        const showResourceManager = ref(false);
         const resourceTab = ref('characters');
         const selectedResourceId = ref(null);
         const resEditStepIndex = ref(null);
@@ -98,12 +102,16 @@ createApp({
         const zoomPercent = ref(100);
         const detailPanelCollapsed = ref(false);
         const detailPanelWidth = ref(440);
+        const detailPanelHeight = ref(null); // null = auto height
+        const resourceListWidth = ref(240);  // 资源管理器左侧列表宽度
+        const stepDetailWidth = ref(380);    // 步骤编辑面板宽度
         const stepListFocusIndex = ref(0);
         const showFileMenu = ref(false);
-        const tooltip = reactive({ show:false, text:'', x:0, y:0 });
         const selectedSpriteId = ref(null);
         const showAvatarSection = ref(false);
         const resourceImageTarget = ref(null);
+        // 头像编辑列表 —— 将 avatars 对象转成数组，支持稳定的响应式双向绑定
+        const avatarList = ref([]);
         const nodeStyles = reactive({});
         const editorGroups = reactive({});
         const portDragging = reactive({ active:false, fromNodeId:null, fromPortIdx:null, fromStepIdx:null, fromChoiceIdx:null, mouseX:0, mouseY:0, snapTargetId:null, isEndingPort:false });
@@ -211,6 +219,38 @@ createApp({
         });
 
         // ══════════════════════════════════════════════════════════════
+        //  7a. 头像编辑列表同步（avatars 对象 ↔ avatarList 数组）
+        // ══════════════════════════════════════════════════════════════
+        let _avatarSyncLock = false;
+
+        // 头像对象 → 数组（资源切换时同步）
+        watch([selectedResourceId, resourceTab], () => {
+            const res = selectedResource.value;
+            if (!res || !res.avatars) { avatarList.value = []; return; }
+            _avatarSyncLock = true;
+            avatarList.value = Object.entries(res.avatars).map(([id, url]) => ({ id, url }));
+            _avatarSyncLock = false;
+        }, { flush: 'post' });
+
+        // 头像数组 → 对象（编辑时即时同步回数据模型）
+        watch(avatarList, (list) => {
+            if (_avatarSyncLock) return;
+            const res = selectedResource.value;
+            if (!res) return;
+            if (!res.avatars) res.avatars = {};
+            // 重建目标对象
+            const rebuilt = {};
+            for (const entry of list) if (entry.id.trim()) rebuilt[entry.id.trim()] = entry.url;
+            // 比较 keys + values，避免无意义写入导致循环
+            const curStr = JSON.stringify(res.avatars);
+            const newStr = JSON.stringify(rebuilt);
+            if (curStr === newStr) return;
+            // 用新内容替换旧对象
+            for (const k of Object.keys(res.avatars)) delete res.avatars[k];
+            for (const [k, v] of Object.entries(rebuilt)) res.avatars[k] = v;
+        }, { deep: true, flush: 'sync' });
+
+        // ══════════════════════════════════════════════════════════════
         //  7. 步骤拖拽排序
         // ══════════════════════════════════════════════════════════════
         function createStepDragHandler(chapterIdRef, stepIdxRef) {
@@ -268,13 +308,14 @@ createApp({
             showResourceManager, resourceTab, selectedResourceId,
             resourceMeta, chapterRenameIds,
             showExportModal, exportContent, exportModalTitle,
-            showFileMenu, tooltip,
-            showZoomInput, zoomPercent, detailPanelCollapsed, detailPanelWidth,
+            showFileMenu,
+            showZoomInput, zoomPercent, detailPanelCollapsed, detailPanelWidth, detailPanelHeight,
+            resourceListWidth, stepDetailWidth,
             stepListFocusIndex, contextMenuFocusIndex,
             customEffects, effectPreviewRef, effectPreviewActive,
             editingCharEffect, charEffectPreviewRef, charEffectPreviewActive,
             customCharEffects,
-            selectedSpriteId, showAvatarSection,
+            selectedSpriteId, showAvatarSection, avatarList,
             resourceImageTarget,
             globalContextMenu, editingGlobalSearch, globalSearchQuery, globalSearchInput,
             portDragging, resizingNode,
@@ -301,6 +342,8 @@ createApp({
             editorPathResolver, getCharName, getCharSprites,
             isStepEditLocked, isStepLocked,
             resEditStepIndex,
+            // 窗口管理器
+            windowManager,
         };
 
         const ops = {};
@@ -434,6 +477,28 @@ createApp({
         const terminal = createTerminal(ctx, ops);
         Object.assign(ops, terminal);
 
+        // 终端可见性 ↦ 窗口管理器同步（含边栏处理）
+        watch(terminal.terminalVisible, (v) => {
+            if (!windowManager.windows.terminal) return;
+            if (v) {
+                // 打开：如果已停靠则弹出，否则打开
+                if (windowManager.isDocked('terminal')) {
+                    for (const side of ['left','right','bottom']) {
+                        const idx = windowManager.docks[side].findIndex(e => e.id === 'terminal');
+                        if (idx >= 0) { windowManager.undockDockItem(side, idx); break; }
+                    }
+                } else {
+                    windowManager.openWindow('terminal');
+                }
+            } else {
+                // 关闭：如果已停靠则不需要操作
+                if (!windowManager.isDocked('terminal')) {
+                    windowManager.closeWindow('terminal');
+                }
+            }
+        }, { immediate: false });
+
+
         // ══════════════════════════════════════════════════════════════
         //  11. 生命周期
         // ══════════════════════════════════════════════════════════════
@@ -522,6 +587,25 @@ createApp({
             terminalFullscreen: terminal.terminalFullscreen,
             terminalHeight: terminal.terminalHeight,
             terminalPanelClass: terminal.terminalPanelClass,
+            // 窗口管理器
+            windows: windowManager.windows,
+            docks: windowManager.docks,
+            dockActiveIdx: windowManager.dockActiveIdx,
+            snapPreview: windowManager.snapPreview,
+            openWindow: windowManager.openWindow,
+            closeWindow: windowManager.closeWindow,
+            toggleWindow: windowManager.toggleWindow,
+            focusWindow: windowManager.focusWindow,
+            toggleMaximize: windowManager.toggleMaximize,
+            dockWindow: windowManager.dockWindow,
+            undockDockItem: windowManager.undockDockItem,
+            moveDockItem: windowManager.moveDockItem,
+            startDockItemDrag: windowManager.startDockItemDrag,
+            setDockActive: windowManager.setDockActive,
+            isDocked: windowManager.isDocked,
+            startWindowDrag: windowManager.startWindowDrag,
+            startWindowResize: windowManager.startWindowResize,
+            getWindowStyle: windowManager.getWindowStyle,
             // 所有业务函数
             ...ops,
         };

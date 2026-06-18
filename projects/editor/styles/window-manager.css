@@ -1,0 +1,441 @@
+/**
+ * editor/styles/window-manager.css
+ *
+ * 浮动窗口样式 —— 窗口容器、标题栏、操作按钮、最大化状态、缩放手柄
+ * ==================================================================== */
+
+/* ── 窗口容器 ── */
+.editor-window {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary, #14141f);
+  border: 1px solid var(--border-color, #2a2a40);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  overflow: visible;
+  min-width: 300px;
+  min-height: 200px;
+  pointer-events: auto;
+  animation: windowIn 0.15s ease-out;
+}
+
+@keyframes windowIn {
+  from { opacity: 0; transform: scale(0.96) translateY(-8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── 窗口标题栏（拖拽区域） ── */
+.window-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--bg-surface, #1e1e30);
+  border-bottom: 1px solid var(--border-color, #2a2a40);
+  cursor: default;
+  user-select: none;
+  flex-shrink: 0;
+  min-height: 38px;
+  /* 让 header 在圆角窗口中也显示圆角顶部 */
+  border-radius: var(--radius-md, 8px) var(--radius-md, 8px) 0 0;
+}
+
+.window-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+  white-space: nowrap;
+}
+
+/* ── 标题栏操作按钮 ── */
+.window-header-actions {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.window-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 13px;
+  line-height: 1;
+  transition: background 0.12s, color 0.12s;
+}
+
+.window-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-primary, #e0e0e0);
+}
+
+.window-btn-close:hover {
+  background: #c0392b;
+  color: white;
+}
+
+/* ── 窗口主体 ── */
+.window-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-secondary, #14141f);
+}
+
+/* 让 modal-body（设置窗口内容）填充剩余空间，覆盖 modals.css 中的默认样式 */
+.window-body > .modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background: transparent;
+  max-height: none;
+}
+
+/* 让 resource-body（资源管理器内容）填充剩余空间 */
+.window-body > .resource-body {
+  flex: 1;
+}
+
+/* 窗口内终端内容填满 */
+.window-body > .terminal-panel-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0d0d1a;
+}
+
+/* ── 最大化状态 ── */
+.editor-window.window-is-maximized {
+  border-radius: 0 !important;
+  border: none !important;
+  animation-duration: 0s;
+}
+
+.editor-window.window-is-maximized > .window-header {
+  border-radius: 0 !important;
+}
+
+/* ── 拖拽时的光标反馈 ── */
+.window-dragging {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+/* ── 窗口底部操作栏 ── */
+.window-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color, #2a2a40);
+  background: var(--bg-surface, #1e1e30);
+  flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════════
+   窗口缩放手柄（8 方向）
+   用绝对定位覆盖在窗口边缘
+   ════════════════════════════════════════════════ */
+
+/* 容器 —— 覆盖整个窗口，pointer-events: none 让点击穿透到内容，
+   但子手柄设为 pointer-events: auto 可交互 */
+.window-resize-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* 所有手柄继承不可选中 */
+.window-resize-overlay > * {
+  pointer-events: auto;
+  user-select: none;
+}
+
+/* ── 四边 ── */
+.wr-edge-n,
+.wr-edge-s,
+.wr-edge-w,
+.wr-edge-e {
+  position: absolute;
+  background: transparent;
+  transition: background 0.1s;
+}
+
+.wr-edge-n { top: -3px; left: 6px; right: 6px; height: 6px; cursor: ns-resize; }
+.wr-edge-s { bottom: -3px; left: 6px; right: 6px; height: 6px; cursor: ns-resize; }
+.wr-edge-w { left: -3px; top: 6px; bottom: 6px; width: 6px; cursor: ew-resize; }
+.wr-edge-e { right: -3px; top: 6px; bottom: 6px; width: 6px; cursor: ew-resize; }
+
+/* ── 四角 ── */
+.wr-corner-nw,
+.wr-corner-ne,
+.wr-corner-sw,
+.wr-corner-se {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: transparent;
+  z-index: 2;
+  transition: background 0.1s, border-color 0.1s;
+  border: 1.5px solid transparent;
+  border-radius: 2px;
+}
+
+.wr-corner-nw { top: -4px; left: -4px; cursor: nwse-resize; }
+.wr-corner-ne { top: -4px; right: -4px; cursor: nesw-resize; }
+.wr-corner-sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.wr-corner-se { bottom: -4px; right: -4px; cursor: nwse-resize; }
+
+/* 悬停时的视觉效果 */
+.wr-edge-n:hover, .wr-edge-s:hover,
+.wr-edge-w:hover, .wr-edge-e:hover {
+  background: rgba(138, 207, 138, 0.12);
+}
+
+.wr-corner-nw:hover, .wr-corner-ne:hover,
+.wr-corner-sw:hover, .wr-corner-se:hover {
+  background: rgba(138, 207, 138, 0.18);
+  border-color: rgba(138, 207, 138, 0.4);
+}
+
+/* 终端在窗口内时的样式 */
+.terminal-window-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0d0d1a;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #c0e0d0;
+}
+
+.terminal-window-body .terminal-output {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+  background: #0d0d1a;
+}
+
+.terminal-window-body .terminal-input-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px 6px;
+  background: #0d0d1a;
+  border-top: 1px solid #1a1a3a;
+  flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════════
+   贴靠预览 —— 拖拽窗口时显示半透明矩形
+   ════════════════════════════════════════════════ */
+.snap-preview-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+.snap-preview-rect {
+  position: absolute;
+  background: rgba(74, 138, 74, 0.15);
+  border: 2px solid rgba(74, 138, 74, 0.5);
+  border-radius: 4px;
+  transition: all 0.08s ease;
+  animation: snapPulse 1.2s ease-in-out infinite;
+}
+@keyframes snapPulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* ════════════════════════════════════════════════
+   边栏系统 —— 左/右/底部停靠面板
+   ════════════════════════════════════════════════ */
+
+/* 边栏容器 */
+.dock-area {
+  display: flex;
+  background: var(--bg-secondary, #14141f);
+  border-color: var(--border-color, #2a2a40);
+  border-style: solid;
+  border-width: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.dock-area-left {
+  flex-direction: column;
+  border-right-width: 1px;
+  min-width: 0;
+}
+.dock-area-right {
+  flex-direction: column;
+  border-left-width: 1px;
+  min-width: 0;
+}
+.dock-area-bottom {
+  flex-direction: row;
+  border-top-width: 1px;
+  min-height: 0;
+}
+
+/* 边栏为空时隐藏 */
+.dock-area.dock-empty {
+  display: none;
+}
+
+/* 边栏内部布局 */
+.dock-inner {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  flex-direction: inherit;
+}
+
+/* 边栏标签栏（多个停靠面板时使用标签切换） */
+.dock-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  background: var(--bg-tertiary, #1a1a2a);
+  border-bottom: 1px solid var(--border-color, #2a2a40);
+  min-height: 34px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.dock-area-bottom .dock-tab-bar {
+  flex-direction: column;
+  border-bottom: none;
+  border-right: 1px solid var(--border-color, #2a2a40);
+  min-width: 34px;
+  min-height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* 标签项 */
+.dock-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+  transition: background 0.1s, color 0.1s;
+  border-right: 1px solid var(--border-color, #2a2a40);
+}
+.dock-tab:hover {
+  background: var(--bg-surface, #1e1e30);
+  color: var(--text-primary, #e0e0e0);
+}
+.dock-tab.active {
+  background: var(--bg-secondary, #14141f);
+  color: var(--accent-green-bright, #5fcf5f);
+  border-bottom: 2px solid var(--accent-green, #4a8a4a);
+  margin-bottom: -1px;
+}
+.dock-area-bottom .dock-tab {
+  flex-direction: column;
+  border-right: none;
+  border-bottom: 1px solid var(--border-color, #2a2a40);
+  padding: 6px 8px;
+}
+.dock-area-bottom .dock-tab.active {
+  border-bottom: none;
+  border-right: 2px solid var(--accent-green, #4a8a4a);
+  margin-bottom: 0;
+  margin-right: -1px;
+}
+
+/* 标签拖拽手柄 */
+.dock-tab-drag {
+  cursor: grab;
+  font-size: 10px;
+  color: var(--text-dim, #666);
+  padding: 2px;
+  flex-shrink: 0;
+}
+.dock-tab-drag:active { cursor: grabbing; }
+
+/* 标签操作按钮 */
+.dock-tab-actions { display: flex; gap: 2px; margin-left: auto; flex-shrink: 0; }
+.dock-tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim, #666);
+  cursor: pointer;
+  width: 20px; height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-size: 11px;
+  transition: background 0.1s, color 0.1s;
+}
+.dock-tab-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary, #e0e0e0); }
+.dock-tab-btn-pop:hover { color: var(--accent-green-bright, #5fcf5f); }
+.dock-tab-btn-close:hover { color: var(--accent-red, #c05050); }
+
+/* 边栏内容区 */
+.dock-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-secondary, #14141f);
+}
+
+/* 边栏宽度/高度拖拽手柄 */
+.dock-resize-handle {
+  flex-shrink: 0;
+  z-index: 15;
+  transition: background 0.15s;
+  user-select: none;
+}
+.dock-resize-handle:hover { background: var(--accent-green, #4a8a4a); }
+.dock-resize-handle-h {
+  width: 4px;
+  cursor: col-resize;
+}
+.dock-resize-handle-v {
+  height: 4px;
+  cursor: ns-resize;
+}
+
+/* 底边栏特有布局——水平排列标签+内容 */
+.dock-area-bottom .dock-inner {
+  flex-direction: row;
+}
+.dock-area-bottom .dock-content {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-content: flex-start;
+}
+
+/* 边栏内部嵌入的窗口组件 */
+.dock-content > .resource-body,
+.dock-content > .terminal-window-body,
+.dock-content > .modal-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}

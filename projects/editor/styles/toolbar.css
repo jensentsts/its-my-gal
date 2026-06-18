@@ -121,6 +121,19 @@
 .tb-icon-btn.tb-icon-resource:hover { color: #80e080; }
 .tb-icon-btn.tb-icon-warn:hover { color: var(--accent-yellow); }
 .tb-icon-btn.tb-disabled { opacity: 0.35; pointer-events: none; cursor: default; }
+
+/* ── 窗口按钮高亮态（窗口打开时按钮亮起） ── */
+.tb-icon-btn.tb-active {
+    color: #8acf8a;
+    background: rgba(138, 207, 138, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(138, 207, 138, 0.25);
+}
+/* 终端按钮特有形变 */
+.tb-icon-btn.tb-icon-terminal {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -1px;
+}
 .toolbar-sep { width: 1px; height: 20px; background: var(--border-color); margin: 0 4px; flex-shrink: 0; }
 
 /* ── 居中标题 ── */

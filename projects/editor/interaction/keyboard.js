@@ -2,7 +2,7 @@
  * editor/interaction/keyboard.js —— 全局键盘快捷键
  */
 export function createKeyboard(ctx, ops) {
-    const { contextMenu, globalContextMenu, showGameSettings, showResourceManager, showExportModal, showFileMenu, editingGlobalSearch, showZoomInput, selectedChapterId, selectedEndingId, selectedEdge, contextMenuFocusIndex, treeNodes, chapters, selectedNodeIds, editingSteps, editingStepIndex, globalContextMenu: gcm } = ctx;
+    const { contextMenu, globalContextMenu, showExportModal, showFileMenu, editingGlobalSearch, showZoomInput, selectedChapterId, selectedEndingId, selectedEdge, contextMenuFocusIndex, treeNodes, chapters, selectedNodeIds, editingSteps, editingStepIndex, windowManager, globalContextMenu: gcm } = ctx;
 
     function isInputFocused() {
         const tag = document.activeElement?.tagName || '';
@@ -19,8 +19,21 @@ export function createKeyboard(ctx, ops) {
         if (key === 'Escape') {
             if (contextMenu.show) { ops.closeContextMenu(); e.preventDefault(); return; }
             if (globalContextMenu.show) { ops.closeGlobalContextMenu(); e.preventDefault(); return; }
-            if (showGameSettings.value) { showGameSettings.value = false; e.preventDefault(); return; }
-            if (showResourceManager.value) { showResourceManager.value = false; e.preventDefault(); return; }
+
+            // 窗口管理器：关闭获得焦点的窗口，焦点传递给 zIndex 次高的窗口
+            const { windows } = windowManager;
+            const visibleIds = Object.keys(windows)
+                .filter(id => windows[id].visible)
+                .sort((a, b) => windows[b].zIndex - windows[a].zIndex);
+            if (visibleIds.length > 0) {
+                windowManager.closeWindow(visibleIds[0]);
+                e.preventDefault();
+                if (visibleIds.length > 1) {
+                    windowManager.focusWindow(visibleIds[1]);
+                }
+                return;
+            }
+
             if (showExportModal.value) { showExportModal.value = false; e.preventDefault(); return; }
             if (showFileMenu.value) { showFileMenu.value = false; e.preventDefault(); return; }
             if (editingGlobalSearch.value) { ops.endGlobalSearch(); e.preventDefault(); return; }

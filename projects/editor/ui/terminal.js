@@ -829,7 +829,13 @@ export function createTerminal(ctx, ops) {
                 _doTabComplete();
                 break;
             case 'Escape':
-                _compHide();
+                if (_compOpen || _histSearchActive) {
+                    if (_histSearchActive) _cancelHistSearch();
+                    else _compHide();
+                } else {
+                    e.preventDefault();
+                    toggleTerminal();
+                }
                 break;
         }
 
@@ -1325,6 +1331,12 @@ export function createTerminal(ctx, ops) {
         if (e.key === '`' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             toggleTerminal();
+        }
+        // ESC 关闭终端
+        if (e.key === 'Escape' && terminalVisible.value && !_compOpen && !_histSearchActive) {
+            e.preventDefault();
+            toggleTerminal();
+            return;
         }
         // 按 / 打开终端（仅在非输入框状态）
         if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !isInputFocused()) {

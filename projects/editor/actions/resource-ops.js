@@ -21,6 +21,10 @@ export function createResourceOps(ctx, ops) {
     const { showToast, saveUndoSnapshot, stopEffectPreview, stopCharEffectPreview } = ops;
 
     function openResourceManager() {
+        if (showResourceManager.value) {
+            showResourceManager.value = false;
+            return;
+        }
         showResourceManager.value = true;
         resourceTab.value = 'characters';
         selectedResourceId.value = null;
@@ -98,14 +102,6 @@ export function createResourceOps(ctx, ops) {
         character.sprites[spriteId] = { id: spriteId, label: '新立绘', url: autoUrl };
     }
 
-    function addAvatar(character) {
-        if (!character.avatars) character.avatars = {};
-        const avatarId = 'avatar_' + Date.now().toString(36);
-        const charId = Object.keys(gameCharacters).find(cid => gameCharacters[cid] === character);
-        const autoUrl = charId ? editorPathResolver.avatar(charId, avatarId) : '';
-        character.avatars[avatarId] = autoUrl;
-    }
-
     function renameResource(type, oldId) {
         const meta = resourceMeta[type];
         if (!meta || !oldId) return;
@@ -162,7 +158,7 @@ export function createResourceOps(ctx, ops) {
 
     return {
         openResourceManager, selectResource,
-        addResource, deleteResource, addSprite, addAvatar,
+        addResource, deleteResource, addSprite,
         renameResource, updateReferences,
     };
 }

@@ -50,22 +50,19 @@
         <option value="center-right"><option value="right-far">
     </datalist>
 
-    <div id="editor-app" v-cloak @contextmenu.prevent="onGlobalContextMenu" @click="closeGlobalContextMenu" @mouseover="onGlobalMouseOver" @mouseout="onGlobalMouseOut">
-
-        <!-- 自定义悬浮提示 -->
-        <div class="custom-tooltip" v-if="tooltip.show" :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">{{ tooltip.text }}</div>
+    <div id="editor-app" v-cloak @contextmenu.prevent="onGlobalContextMenu" @click="closeGlobalContextMenu">
 
         <!-- ============================================================ -->
         <!--  顶部工具栏（图标化 + 居中标题）                              -->
         <!-- ============================================================ -->
         <div class="editor-toolbar">
             <div class="toolbar-left">
-                <button class="tb-icon-btn" :class="{ 'tb-disabled': !undoCount }" data-tooltip="撤销 (Ctrl+Z)" @click="undo" :disabled="!undoCount">↩</button>
-                <button class="tb-icon-btn" :class="{ 'tb-disabled': !redoCount }" data-tooltip="重做 (Ctrl+Shift+Z)" @click="redo" :disabled="!redoCount">↪</button>
+                <button class="tb-icon-btn" :class="{ 'tb-disabled': !undoCount }" title="撤销 (Ctrl+Z)" @click="undo" :disabled="!undoCount">↩</button>
+                <button class="tb-icon-btn" :class="{ 'tb-disabled': !redoCount }" title="重做 (Ctrl+Shift+Z)" @click="redo" :disabled="!redoCount">↪</button>
                 <span class="toolbar-sep"></span>
-                <button class="tb-icon-btn" data-tooltip="自动布局" @click="autoLayout">🔄</button>
+                <button class="tb-icon-btn tb-icon-sync" title="同步到游戏引擎 (Ctrl+S)" @click="syncToGame">💾</button>
                 <div class="toolbar-submenu-wrap">
-                    <button class="tb-icon-btn" data-tooltip="导入/导出" @click.stop="showFileMenu = !showFileMenu">📂</button>
+                    <button class="tb-icon-btn" title="导入/导出" @click.stop="showFileMenu = !showFileMenu">📂</button>
                     <div class="toolbar-submenu" v-if="showFileMenu" @click.stop>
                         <div class="submenu-item" @click="exportAll; showFileMenu=false">📋 导出 JS (Ctrl+Shift+E)</div>
                         <div class="submenu-item" @click="exportJSON; showFileMenu=false">📄 导出 JSON (Ctrl+E)</div>
@@ -76,7 +73,7 @@
                 <span class="toolbar-subtitle">{{ totalChapters }}章·{{ totalSteps }}步</span>
             </div>
             <div class="toolbar-center">
-                <div class="toolbar-game-title" data-tooltip="双击或按 Ctrl+F 进行全局资源搜索" @dblclick="startGlobalSearch">
+                <div class="toolbar-game-title" title="双击或按 Ctrl+F 进行全局资源搜索" @dblclick="startGlobalSearch">
                     <span v-if="!editingGlobalSearch" class="game-title-text">{{ gameConfig.title || '未命名游戏' }}</span>
                     <input v-else ref="globalSearchInput" v-model="globalSearchQuery"
                            @blur="endGlobalSearch" @keyup.escape="endGlobalSearch"
@@ -94,14 +91,15 @@
                 </div>
             </div>
             <div class="toolbar-right">
-                <button class="tb-icon-btn" data-tooltip="资源完整性校验" @click="validateEditorResources">🔍</button>
-                <button class="tb-icon-btn tb-icon-sync" data-tooltip="同步到游戏引擎 (Ctrl+S)" @click="syncToGame">💾</button>
-                <button class="tb-icon-btn tb-icon-preview" data-tooltip="剧情预览（同步并打开游戏页面）" @click="previewStory">▶️</button>
-                <button class="tb-icon-btn tb-icon-config" data-tooltip="游戏全局设置" @click="openGameSettings">⚙️</button>
-                <button class="tb-icon-btn tb-icon-resource" data-tooltip="资源管理" @click="openResourceManager">📦</button>
-                <button class="tb-icon-btn tb-icon-warn" data-tooltip="还原原始数据" @click="resetAll">⚠️</button>
-                <button class="tb-icon-btn tb-icon-terminal" :class="{ 'terminal-active': terminalVisible }" data-tooltip="终端面板 (/ 或 Ctrl+`)" @click="toggleTerminal">>_</button>
-                <a href="projects/game/index.html" class="tb-icon-btn" data-tooltip="返回游戏">🎮</a>
+                <!-- 非窗口按钮组 -->
+                <button class="tb-icon-btn" title="全局搜索 (双击标题触发)" @click="startGlobalSearch">🔍</button>
+                <button class="tb-icon-btn" title="同步并打开游戏" @click="previewStory">🎮</button>
+                <button class="tb-icon-btn" title="资源自检" @click="validateEditorResources">⚠️</button>
+                <span class="toolbar-sep"></span>
+                <!-- 窗口按钮组（按钮高亮表示窗口已打开） -->
+                <button class="tb-icon-btn tb-icon-terminal" :class="{ 'tb-active': windows.terminal?.visible }" title="终端面板 (/ 或 Ctrl+`)" @click="toggleTerminal">>_</button>
+                <button class="tb-icon-btn tb-icon-config" :class="{ 'tb-active': windows.gameSettings?.visible }" title="游戏全局设置" @click="openGameSettings">⚙️</button>
+                <button class="tb-icon-btn tb-icon-resource" :class="{ 'tb-active': windows.resourceManager?.visible }" title="资源管理" @click="openResourceManager">📦</button>
             </div>
             <!-- 隐藏的文件导入 input -->
             <input type="file" id="pack-import-input" accept=".zip" style="display:none"
@@ -112,9 +110,60 @@
         </div>
 
         <!-- ============================================================ -->
-        <!--  主编辑区域                                                   -->
+        <!--  主编辑区域 + 边栏系统                                        -->
         <!-- ============================================================ -->
-        <div class="editor-main">
+        <div class="editor-body-area">
+
+            <!-- 左边栏 -->
+            <div class="dock-area dock-area-left" :class="{ 'dock-empty': !docks.left.length }"
+                 v-if="docks.left.length">
+                <div class="dock-inner">
+                    <div class="dock-tab-bar">
+                        <template v-for="(entry, idx) in docks.left" :key="entry.id">
+                            <div class="dock-tab" :class="{ active: dockActiveIdx.left === idx }"
+                                 @click="setDockActive('left', idx)">
+                                <span class="dock-tab-drag" @mousedown.stop="startDockItemDrag($event, 'left', idx)">⠿</span>
+                                <span>{{ entry.icon }} {{ entry.title }}</span>
+                                <span class="dock-tab-actions">
+                                    <button class="dock-tab-btn dock-tab-btn-pop" title="弹出为窗口" @click.stop="undockDockItem('left', idx)">⤴</button>
+                                    <button class="dock-tab-btn dock-tab-btn-close" title="关闭" @click.stop="closeWindow(entry.id); undockDockItem('left', idx)">✕</button>
+                                </span>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="dock-content">
+                        <!-- 终端 -->
+                        <div v-if="dockActiveIdx.left >= 0 && docks.left[dockActiveIdx.left]?.id === 'terminal'"
+                             class="terminal-window-body" style="flex:1">
+                            <div class="terminal-output">
+                                <div v-for="(line, i) in terminalLines" :key="i"
+                                     class="terminal-line" :class="'term-' + line.type">{{ line.text }}</div>
+                            </div>
+                            <div class="terminal-input-row">
+                                <span class="terminal-prompt">$</span>
+                                <textarea class="terminal-input" v-model="terminalInput"
+                                       @keydown="onTerminalKeydown"
+                                       placeholder="输入 help 查看命令…"
+                                       spellcheck="false" autocomplete="off" rows="1"></textarea>
+                            </div>
+                        </div>
+                        <!-- 资源管理器 -->
+                        <div v-if="dockActiveIdx.left >= 0 && docks.left[dockActiveIdx.left]?.id === 'resourceManager'"
+                             class="resource-body" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+                            <div v-html="'<i>资源管理器已停靠到左边栏</i>'"></div>
+                        </div>
+                        <!-- 游戏设置 -->
+                        <div v-if="dockActiveIdx.left >= 0 && docks.left[dockActiveIdx.left]?.id === 'gameSettings'"
+                             class="modal-body" style="flex:1;overflow-y:auto">
+                            <i>游戏设置已停靠到左边栏</i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 中央主栏（树 + 详情 + 底边栏） -->
+            <div class="editor-main-wrapper">
+                <div class="editor-main">
             <!-- 左侧：树形视图 -->
             <div class="tree-panel"
                  @wheel.prevent="handleWheel"
@@ -218,7 +267,7 @@
                                  class="node-top-port"
                                  :class="{ 'port-ending': tp.isEnding, 'port-multi': tp.multiSource, 'port-unlinked': !tp.fromId }"
                                  :style="{ left: (tp.rpX - 7) + 'px', top: (tp.rpY - 7) + 'px' }"
-                                 :data-tooltip="!tp.fromId ? '⬇ 无入度，可从此处拖入连线' : (tp.isEnding ? '🎬 ' : '← ') + (tp.multiSource ? (tp.sourceCount + ' 个来源') : tp.fromId)"
+                                 :title="!tp.fromId ? '⬇ 无入度，可从此处拖入连线' : (tp.isEnding ? '🎬 ' : '← ') + (tp.multiSource ? (tp.sourceCount + ' 个来源') : tp.fromId)"
                                  @click.stop="tp.fromId ? selectNode(tp.fromId) : null"></div>
                         </div>
                         <!-- 节点内容区（文字在此区域内裁剪，端口在区外不受影响） -->
@@ -242,7 +291,7 @@
                                  class="node-bottom-port"
                                  :class="{ 'port-ending': bp.isEnding, 'port-unlinked': !bp.hasTarget }"
                                  :style="{ left: (bp.rpX - 7) + 'px', top: (bp.rpY - 7) + 'px' }"
-                                 :data-tooltip="bp.tooltipText || ('→ ' + bp.targetId)"
+                                 :title="bp.tooltipText || ('→ ' + bp.targetId)"
                                  @mousedown.stop="startPortDrag($event, node.id, bi, bp)"
                                  @click.stop="jumpToPortTarget(bp)"></div>
                         </div>
@@ -356,18 +405,23 @@
                         <span v-if="!showZoomInput">{{ Math.round(viewScale * 100) }}%</span>
                         <input v-else type="number" v-model.number="zoomPercent"
                                @blur="applyZoomPercent" @keyup.enter="applyZoomPercent"
-                               @click.stop min="30" max="200" class="zoom-percent-input" />
+                               @click.stop min="10" max="300" class="zoom-percent-input" />
                     </span>
                     <button class="zoom-btn" @click="zoomIn" title="放大 (+)">+</button>
                     <button class="zoom-btn zoom-btn-reset" @click="resetView" title="重置视图 (Ctrl+0)">⊡</button>
                 </div>
 
-                <!-- 悬浮新建章节按钮（左下角） -->
-                <button class="floating-add-btn" @click="addChapter" title="新建章节 (Ctrl+N)">＋</button>
+                <!-- 左下角：自动布局 + 新建章节 -->
+                <div class="floating-bottom-left">
+                    <button class="floating-btn" @click="autoLayout" title="自动布局">🔄</button>
+                    <button class="floating-add-btn" @click="addChapter" title="新建章节 (Ctrl+N)">＋</button>
+                </div>
             </div>
 
+            <!-- 步骤编辑邻接面板宽度拖拽手柄 -->
+            <div class="resize-handle-vertical" v-if="editingStep && selectedChapterId" @mousedown="startStepDetailResize($event)" style="flex-shrink:0"></div>
             <!-- 步骤编辑邻接面板 -->
-            <div class="step-detail-panel" v-if="editingStep && selectedChapterId">
+            <div class="step-detail-panel" v-if="editingStep && selectedChapterId" :style="{ width: stepDetailWidth + 'px' }">
                 <div class="step-detail-panel-header">
                     <span class="section-label">✏️ 步骤 #{{ editingStepIndex + 1 }}</span>
                     <div class="step-detail-panel-actions">
@@ -827,12 +881,15 @@
 
             <!-- 面板拖拽调整宽度手柄 -->
             <div class="panel-resize-handle" v-if="(selectedChapterId || selectedEndingId || selectedGroupId) && !detailPanelCollapsed"
-                 @mousedown="startPanelResize" data-tooltip="拖动调整面板宽度"></div>
+                 @mousedown="startPanelResize" title="拖动调整面板宽度">
+                <div class="panel-resize-corner" @mousedown.stop="startPanelResizeCorner($event)"
+                     title="拖动调整大小"></div>
+            </div>
 
             <!-- 右侧：编辑面板 -->
-            <div class="detail-panel" v-if="selectedChapterId || selectedEndingId || selectedGroupId" :class="{ 'detail-collapsed': detailPanelCollapsed }" :style="{ width: detailPanelWidth + 'px' }">
+            <div class="detail-panel" v-if="selectedChapterId || selectedEndingId || selectedGroupId" :class="{ 'detail-collapsed': detailPanelCollapsed }" :style="{ width: detailPanelWidth + 'px', height: detailPanelHeight || (detailPanelCollapsed ? 'auto' : '100%') }">
                 <button class="detail-toggle-btn" @click="detailPanelCollapsed = !detailPanelCollapsed"
-                        :data-tooltip="detailPanelCollapsed ? '展开编辑面板' : '收起编辑面板'">
+                        :title="detailPanelCollapsed ? '展开编辑面板' : '收起编辑面板'">
                     {{ detailPanelCollapsed ? '◀' : '▶' }}
                 </button>
 
@@ -904,12 +961,15 @@
                 <div class="detail-header">
                     <h2>
                         <span class="detail-icon">📜</span>
-                        <input class="chapter-id-input" v-model="editingChapterId"
-                               @change="onChapterIdChange" placeholder="chapter_id" />
+                        <input class="chapter-id-input" :value="selectedChapterId"
+                               @focus="$event.target.value = selectedChapterId; $event.target.select()"
+                               @change="editingChapterId = $event.target.value; onChapterIdChange()"
+                               @keyup.escape="$event.target.blur()"
+                               placeholder="chapter_id" />
                     </h2>
                     <div class="detail-header-actions">
+                        <button class="tb-btn tb-sm tb-danger" @click="deleteChapter" title="删除章节">🗑️</button>
                         <button class="tb-btn tb-sm" @click="locateTo('resource', selectedChapterId, 'chapters')" title="在资源管理器中定位">📦</button>
-                        <button class="tb-btn tb-sm tb-danger" @click="deleteChapter" title="删除章节">🗑️ 删除章节</button>
                     </div>
                 </div>
 
@@ -1036,35 +1096,144 @@
 
         </div><!-- /editor-main -->
 
-        <!-- ============================================================ -->
-        <!--  内置终端面板 Ctrl+` 切换                                     -->
-        <!-- ============================================================ -->
-        <div class="terminal-panel" :class="terminalPanelClass"
-             :style="terminalVisible ? { height: terminalHeight + 'px' } : {}">
-            <!-- 拖拽调整大小手柄 -->
-            <div class="terminal-resize-handle" @mousedown="onResizeStart"></div>
-            <div class="terminal-header">
-                <span class="terminal-header-label">>_ TERMINAL</span>
-                <div class="terminal-header-actions">
-                    <button class="terminal-header-btn" :class="{ 'term-btn-fullscreen-on': terminalFullscreen }"
-                            @click="toggleFullscreen" :title="terminalFullscreen ? '退出全屏' : '全屏 (保留顶栏)'">
-                        {{ terminalFullscreen ? '⤡' : '⤢' }}
-                    </button>
-                    <button class="terminal-header-btn" @click="termClear" title="清屏">⎚</button>
-                    <button class="terminal-header-btn" @click="toggleTerminal" title="关闭">✕</button>
+                <!-- 底边栏 -->
+                <div class="dock-area dock-area-bottom" :class="{ 'dock-empty': !docks.bottom.length }"
+                     v-if="docks.bottom.length">
+                    <div class="dock-inner">
+                        <div class="dock-tab-bar">
+                            <template v-for="(entry, idx) in docks.bottom" :key="entry.id">
+                                <div class="dock-tab" :class="{ active: dockActiveIdx.bottom === idx }"
+                                     @click="setDockActive('bottom', idx)">
+                                    <span class="dock-tab-drag" @mousedown.stop="startDockItemDrag($event, 'bottom', idx)">⠿</span>
+                                    <span>{{ entry.icon }} {{ entry.title }}</span>
+                                    <span class="dock-tab-actions">
+                                        <button class="dock-tab-btn dock-tab-btn-pop" title="弹出为窗口" @click.stop="undockDockItem('bottom', idx)">⤴</button>
+                                        <button class="dock-tab-btn dock-tab-btn-close" title="关闭" @click.stop="closeWindow(entry.id); undockDockItem('bottom', idx)">✕</button>
+                                    </span>
+                                </div>
+                            </template>
+                        </div>
+                        <div class="dock-content">
+                            <div v-if="dockActiveIdx.bottom >= 0 && docks.bottom[dockActiveIdx.bottom]?.id === 'terminal'"
+                                 class="terminal-window-body" style="flex:1">
+                                <div class="terminal-output">
+                                    <div v-for="(line, i) in terminalLines" :key="i"
+                                         class="terminal-line" :class="'term-' + line.type">{{ line.text }}</div>
+                                </div>
+                                <div class="terminal-input-row">
+                                    <span class="terminal-prompt">$</span>
+                                    <textarea class="terminal-input" v-model="terminalInput"
+                                           @keydown="onTerminalKeydown"
+                                           placeholder="输入 help 查看命令…"
+                                           spellcheck="false" autocomplete="off" rows="1"></textarea>
+                                </div>
+                            </div>
+                            <div v-if="dockActiveIdx.bottom >= 0 && docks.bottom[dockActiveIdx.bottom]?.id === 'resourceManager'"
+                                 class="resource-body" style="flex:1"><i>资源管理器已停靠到底边栏</i></div>
+                            <div v-if="dockActiveIdx.bottom >= 0 && docks.bottom[dockActiveIdx.bottom]?.id === 'gameSettings'"
+                                 class="modal-body" style="flex:1"><i>游戏设置已停靠到底边栏</i></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- /editor-main-wrapper -->
+
+            <!-- 右边栏 -->
+            <div class="dock-area dock-area-right" :class="{ 'dock-empty': !docks.right.length }"
+                 v-if="docks.right.length">
+                <div class="dock-inner">
+                    <div class="dock-tab-bar">
+                        <template v-for="(entry, idx) in docks.right" :key="entry.id">
+                            <div class="dock-tab" :class="{ active: dockActiveIdx.right === idx }"
+                                 @click="setDockActive('right', idx)">
+                                <span class="dock-tab-drag" @mousedown.stop="startDockItemDrag($event, 'right', idx)">⠿</span>
+                                <span>{{ entry.icon }} {{ entry.title }}</span>
+                                <span class="dock-tab-actions">
+                                    <button class="dock-tab-btn dock-tab-btn-pop" title="弹出为窗口" @click.stop="undockDockItem('right', idx)">⤴</button>
+                                    <button class="dock-tab-btn dock-tab-btn-close" title="关闭" @click.stop="closeWindow(entry.id); undockDockItem('right', idx)">✕</button>
+                                </span>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="dock-content">
+                        <div v-if="dockActiveIdx.right >= 0 && docks.right[dockActiveIdx.right]?.id === 'terminal'"
+                             class="terminal-window-body" style="flex:1">
+                            <div class="terminal-output">
+                                <div v-for="(line, i) in terminalLines" :key="i"
+                                     class="terminal-line" :class="'term-' + line.type">{{ line.text }}</div>
+                            </div>
+                            <div class="terminal-input-row">
+                                <span class="terminal-prompt">$</span>
+                                <textarea class="terminal-input" v-model="terminalInput"
+                                       @keydown="onTerminalKeydown"
+                                       placeholder="输入 help 查看命令…"
+                                       spellcheck="false" autocomplete="off" rows="1"></textarea>
+                            </div>
+                        </div>
+                        <div v-if="dockActiveIdx.right >= 0 && docks.right[dockActiveIdx.right]?.id === 'resourceManager'"
+                             class="resource-body" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+                            <div v-html="'<i>资源管理器已停靠到右边栏</i>'"></div>
+                        </div>
+                        <div v-if="dockActiveIdx.right >= 0 && docks.right[dockActiveIdx.right]?.id === 'gameSettings'"
+                             class="modal-body" style="flex:1;overflow-y:auto">
+                            <i>游戏设置已停靠到右边栏</i>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="terminal-output">
-                <div v-for="(line, i) in terminalLines" :key="i"
-                     class="terminal-line"
-                     :class="'term-' + line.type">{{ line.text }}</div>
+
+        </div><!-- /editor-body-area -->
+
+        <!-- 贴靠预览 -->
+        <div class="snap-preview-overlay" v-if="snapPreview.active">
+            <div class="snap-preview-rect" :style="{
+                left: (snapPreview.rect?.left || 0) + 'px',
+                top: (snapPreview.rect?.top || 0) + 'px',
+                width: (snapPreview.rect?.width || 0) + 'px',
+                height: (snapPreview.rect?.height || 0) + 'px'
+            }"></div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!--  终端窗口 Ctrl+` 切换                                         -->
+        <!-- ============================================================ -->
+        <div class="editor-window" :class="{ 'window-is-maximized': windows.terminal?.maximized }"
+             v-if="windows.terminal?.visible && !isDocked('terminal')" :style="getWindowStyle('terminal')"
+             @mousedown="focusWindow('terminal')">
+            <!-- 缩放覆盖层（8 方向手柄） -->
+            <div class="window-resize-overlay">
+                <div class="wr-edge-n" @mousedown.stop="startWindowResize($event, 'terminal', 'n')"></div>
+                <div class="wr-edge-s" @mousedown.stop="startWindowResize($event, 'terminal', 's')"></div>
+                <div class="wr-edge-w" @mousedown.stop="startWindowResize($event, 'terminal', 'w')"></div>
+                <div class="wr-edge-e" @mousedown.stop="startWindowResize($event, 'terminal', 'e')"></div>
+                <div class="wr-corner-nw" @mousedown.stop="startWindowResize($event, 'terminal', 'nw')"></div>
+                <div class="wr-corner-ne" @mousedown.stop="startWindowResize($event, 'terminal', 'ne')"></div>
+                <div class="wr-corner-sw" @mousedown.stop="startWindowResize($event, 'terminal', 'sw')"></div>
+                <div class="wr-corner-se" @mousedown.stop="startWindowResize($event, 'terminal', 'se')"></div>
             </div>
-            <div class="terminal-input-row">
-                <span class="terminal-prompt">$</span>
-                <textarea class="terminal-input" v-model="terminalInput"
-                       @keydown="onTerminalKeydown"
-                       placeholder="输入 help 查看命令…"
-                       spellcheck="false" autocomplete="off" rows="1"></textarea>
+            <div class="window-header" @mousedown.stop="startWindowDrag($event, 'terminal')">
+                <span class="window-header-title">>_ 终端</span>
+                <div class="window-header-actions">
+                    <button class="window-btn window-btn-maximize" @click.stop="toggleMaximize('terminal')"
+                            :title="windows.terminal?.maximized ? '还原' : '全屏'">
+                        {{ windows.terminal?.maximized ? '⤡' : '⤢' }}
+                    </button>
+                    <button class="window-btn window-btn-close" @click.stop="toggleTerminal" title="关闭">✕</button>
+                </div>
+            </div>
+            <div class="terminal-window-body">
+                <div class="terminal-output">
+                    <div v-for="(line, i) in terminalLines" :key="i"
+                         class="terminal-line"
+                         :class="'term-' + line.type">{{ line.text }}</div>
+                </div>
+                <div class="terminal-input-row">
+                    <span class="terminal-prompt">$</span>
+                    <textarea class="terminal-input" v-model="terminalInput"
+                           @keydown="onTerminalKeydown"
+                           placeholder="输入 help 查看命令…"
+                           spellcheck="false" autocomplete="off" rows="1"></textarea>
+                </div>
             </div>
         </div>
 
@@ -1114,14 +1283,33 @@
         </div>
 
         <!-- ============================================================ -->
-        <!--  游戏设置弹窗                                                 -->
+        <!--  游戏设置窗口                                                 -->
         <!-- ============================================================ -->
-        <div class="modal-overlay" v-if="showGameSettings" @click.self="showGameSettings = false">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>⚙️ 游戏全局设置</h3>
-                    <button class="close-btn" @click="showGameSettings = false">✕</button>
+        <div class="editor-window" :class="{ 'window-is-maximized': windows.gameSettings?.maximized }"
+             v-if="windows.gameSettings?.visible && !isDocked('gameSettings')" :style="getWindowStyle('gameSettings')"
+             @mousedown="focusWindow('gameSettings')">
+            <!-- 缩放覆盖层 -->
+            <div class="window-resize-overlay">
+                <div class="wr-edge-n" @mousedown.stop="startWindowResize($event, 'gameSettings', 'n')"></div>
+                <div class="wr-edge-s" @mousedown.stop="startWindowResize($event, 'gameSettings', 's')"></div>
+                <div class="wr-edge-w" @mousedown.stop="startWindowResize($event, 'gameSettings', 'w')"></div>
+                <div class="wr-edge-e" @mousedown.stop="startWindowResize($event, 'gameSettings', 'e')"></div>
+                <div class="wr-corner-nw" @mousedown.stop="startWindowResize($event, 'gameSettings', 'nw')"></div>
+                <div class="wr-corner-ne" @mousedown.stop="startWindowResize($event, 'gameSettings', 'ne')"></div>
+                <div class="wr-corner-sw" @mousedown.stop="startWindowResize($event, 'gameSettings', 'sw')"></div>
+                <div class="wr-corner-se" @mousedown.stop="startWindowResize($event, 'gameSettings', 'se')"></div>
+            </div>
+            <div class="window-header" @mousedown.stop="startWindowDrag($event, 'gameSettings')">
+                <span class="window-header-title">{{ windows.gameSettings?.icon }} {{ windows.gameSettings?.title }}</span>
+                <div class="window-header-actions">
+                    <button class="window-btn window-btn-maximize" @click.stop="toggleMaximize('gameSettings')"
+                            :title="windows.gameSettings?.maximized ? '还原' : '全屏'">
+                        {{ windows.gameSettings?.maximized ? '⤡' : '⤢' }}
+                    </button>
+                    <button class="window-btn window-btn-close" @click.stop="closeWindow('gameSettings')" title="关闭">✕</button>
                 </div>
+            </div>
+            <div class="window-body">
                 <div class="modal-body">
                     <div class="form-row">
                         <label>游戏标题</label>
@@ -1183,23 +1371,42 @@
                         ⚠ 修改设置后请点击"同步到游戏"使游戏引擎生效。
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="window-footer">
                     <button class="tb-btn" @click="saveGameSettings">💾 保存设置</button>
-                    <button class="tb-btn" @click="showGameSettings = false">关闭</button>
+                    <button class="tb-btn" @click="closeWindow('gameSettings')">关闭</button>
                 </div>
             </div>
         </div>
 
         <!-- ============================================================ -->
-        <!--  资源管理弹窗                                                 -->
+        <!--  资源管理窗口                                                 -->
         <!-- ============================================================ -->
-        <div class="modal-overlay" v-if="showResourceManager" @click.self="showResourceManager = false">
-            <div class="modal-content modal-resource">
-                <div class="modal-header">
-                    <h3>📦 资源管理</h3>
-                    <button class="close-btn" @click="showResourceManager = false">✕</button>
+        <div class="editor-window" :class="{ 'window-is-maximized': windows.resourceManager?.maximized }"
+             v-if="windows.resourceManager?.visible && !isDocked('resourceManager')" :style="getWindowStyle('resourceManager')"
+             @mousedown="focusWindow('resourceManager')">
+            <!-- 缩放覆盖层 -->
+            <div class="window-resize-overlay">
+                <div class="wr-edge-n" @mousedown.stop="startWindowResize($event, 'resourceManager', 'n')"></div>
+                <div class="wr-edge-s" @mousedown.stop="startWindowResize($event, 'resourceManager', 's')"></div>
+                <div class="wr-edge-w" @mousedown.stop="startWindowResize($event, 'resourceManager', 'w')"></div>
+                <div class="wr-edge-e" @mousedown.stop="startWindowResize($event, 'resourceManager', 'e')"></div>
+                <div class="wr-corner-nw" @mousedown.stop="startWindowResize($event, 'resourceManager', 'nw')"></div>
+                <div class="wr-corner-ne" @mousedown.stop="startWindowResize($event, 'resourceManager', 'ne')"></div>
+                <div class="wr-corner-sw" @mousedown.stop="startWindowResize($event, 'resourceManager', 'sw')"></div>
+                <div class="wr-corner-se" @mousedown.stop="startWindowResize($event, 'resourceManager', 'se')"></div>
+            </div>
+            <div class="window-header" @mousedown.stop="startWindowDrag($event, 'resourceManager')">
+                <span class="window-header-title">{{ windows.resourceManager?.icon }} {{ windows.resourceManager?.title }}</span>
+                <div class="window-header-actions">
+                    <button class="window-btn window-btn-maximize" @click.stop="toggleMaximize('resourceManager')"
+                            :title="windows.resourceManager?.maximized ? '还原' : '全屏'">
+                        {{ windows.resourceManager?.maximized ? '⤡' : '⤢' }}
+                    </button>
+                    <button class="window-btn window-btn-close" @click.stop="closeWindow('resourceManager')" title="关闭">✕</button>
                 </div>
-                <div class="modal-body resource-body">
+            </div>
+            <div class="window-body">
+                <div class="resource-body">
                     <!-- 标签栏 -->
                     <div class="resource-tabs">
                         <div class="resource-tab" :class="{ active: resourceTab === 'chapters' }"
@@ -1224,7 +1431,7 @@
                     <div class="resource-tab-content">
                         <div class="resource-layout">
                             <!-- 左侧列表 -->
-                            <div class="resource-list-panel">
+                            <div class="resource-list-panel" :style="{ width: resourceListWidth + 'px' }">
                                 <div class="resource-list-header">
                                     <button class="tb-btn tb-sm" @click="addResource(resourceTab)" v-if="resourceTab !== 'charEffects'">➕ 添加</button>
                                 </div>
@@ -1242,6 +1449,9 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- 左右分栏拖拽手柄 -->
+                            <div class="resize-handle-vertical" @mousedown="startResourceListResize($event)"></div>
 
                             <!-- 右侧编辑器（effects/charEffects tab 也允许显示内置资源信息） -->
                             <div class="resource-editor" v-if="selectedResource || ((resourceTab === 'effects' || resourceTab === 'charEffects') && selectedResourceId)">
@@ -1293,7 +1503,7 @@
                                         <div v-for="(sp, sid) in (selectedResource.sprites || {})" :key="sid"
                                              class="sprite-card" :class="{ 'sprite-card-active': selectedSpriteId === sid }"
                                              @click="selectedSpriteId = sid"
-                                             :data-tooltip="sp.url || '无图片'">
+                                             :title="sp.url || '无图片'">
                                             <div class="sprite-card-img">
                                                 <img v-if="sp.url" :src="sp.url" @error="e => e.target.style.display='none'" />
                                                 <div v-else class="sprite-card-noimg">?</div>
@@ -1311,7 +1521,7 @@
                                         <div class="res-preview-dropzone sprite-preview-dropzone"
                                              @dragover.prevent @drop.prevent="onSpriteDrop($event, selectedResource.sprites[selectedSpriteId])"
                                              @click="triggerResourceFile(selectedResource.sprites[selectedSpriteId])"
-                                             :data-tooltip="selectedResource.sprites[selectedSpriteId].url || '点击或拖放图片'">
+                                             :title="selectedResource.sprites[selectedSpriteId].url || '点击或拖放图片'">
                                             <img v-if="selectedResource.sprites[selectedSpriteId].url"
                                                  :src="selectedResource.sprites[selectedSpriteId].url" class="res-preview-img"
                                                  @error="e => { e.target.style.display='none'; e.target.nextElementSibling.style.display='flex'; }" />
@@ -1330,15 +1540,15 @@
                                         🖼️ 头像管理 {{ showAvatarSection ? '▾' : '▸' }}
                                     </div>
                                     <div v-if="showAvatarSection">
-                                        <div v-for="(url, aid) in (selectedResource.avatars || {})" :key="aid" class="sprite-row">
-                                            <input type="text" :value="aid" placeholder="key" class="sprite-id" disabled />
-                                            <input type="text" v-model="selectedResource.avatars[aid]" placeholder="头像 URL" class="sprite-url" style="flex:1" />
-                                            <div class="sprite-thumb" v-if="selectedResource.avatars[aid]">
-                                                <img :src="selectedResource.avatars[aid]" @error="e => e.target.style.display='none'" />
+                                        <div v-for="(entry, idx) in avatarList" :key="idx" class="sprite-row">
+                                            <input type="text" v-model="entry.id" placeholder="头像 ID" class="sprite-id" />
+                                            <input type="text" v-model="entry.url" placeholder="头像 URL" class="sprite-url" style="flex:1" />
+                                            <div class="sprite-thumb" v-if="entry.url">
+                                                <img :src="entry.url" @error="e => e.target.style.display='none'" />
                                             </div>
-                                            <button class="step-btn step-btn-del" @click="delete selectedResource.avatars[aid]">✕</button>
+                                            <button class="step-btn step-btn-del" @click="avatarList.splice(idx, 1)">✕</button>
                                         </div>
-                                        <button class="tb-btn tb-sm" @click="addAvatar(selectedResource)">➕ 添加头像</button>
+                                        <button class="tb-btn tb-sm" @click="avatarList.push({ id: 'avatar_' + Date.now().toString(36), url: '' })">➕ 添加头像</button>
                                     </div>
                                 </template>
 
@@ -1347,7 +1557,7 @@
                                     <div class="res-preview-dropzone"
                                          @dragover.prevent @drop.prevent="onResourceDrop($event, selectedResource)"
                                          @click="triggerResourceFile(selectedResource)"
-                                         :data-tooltip="selectedResource.url || '点击或拖放图片到此处'">
+                                         :title="selectedResource.url || '点击或拖放图片到此处'">
                                         <img v-if="selectedResource.url" :src="selectedResource.url" class="res-preview-img"
                                              @error="e => { e.target.style.display='none'; e.target.nextElementSibling.style.display='flex'; }" />
                                         <div class="res-preview-placeholder" v-if="!selectedResource.url || false">
@@ -1383,7 +1593,7 @@
                                     <div class="res-preview-dropzone"
                                          @dragover.prevent @drop.prevent="onResourceDrop($event, selectedResource)"
                                          @click="triggerResourceFile(selectedResource)"
-                                         :data-tooltip="selectedResource.url || '点击或拖放图片到此处'">
+                                         :title="selectedResource.url || '点击或拖放图片到此处'">
                                         <img v-if="selectedResource.url" :src="selectedResource.url" class="res-preview-img"
                                              @error="e => { e.target.style.display='none'; e.target.nextElementSibling.style.display='flex'; }" />
                                         <div class="res-preview-placeholder" v-if="!selectedResource.url || false" style="display:flex">
@@ -1439,7 +1649,7 @@
                                         <div class="res-preview-dropzone item-image-dropzone"
                                              @dragover.prevent @drop.prevent="onResourceDrop($event, selectedResource)"
                                              @click="triggerResourceFile(selectedResource)"
-                                             :data-tooltip="selectedResource.image || '点击或拖放图片'">
+                                             :title="selectedResource.image || '点击或拖放图片'">
                                             <img v-if="selectedResource.image" :src="selectedResource.image" class="res-preview-img"
                                                  @error="e => { e.target.style.display='none'; e.target.nextElementSibling.style.display='flex'; }" />
                                             <div class="res-preview-placeholder" v-if="!selectedResource.image" style="display:flex">
