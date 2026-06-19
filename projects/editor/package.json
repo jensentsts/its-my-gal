@@ -1,6 +1,6 @@
 {
   "name": "@galgame/editor",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Story tree editor and CLI tools for GalEngine",
   "type": "module",
   "private": true,

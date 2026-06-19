@@ -439,3 +439,18 @@
   flex-direction: column;
   overflow: hidden;
 }
+
+/* ── 游戏调试窗口容器 ── */
+.game-debug-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #000;
+  position: relative;
+}
+.game-debug-body > .game-player-root {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}

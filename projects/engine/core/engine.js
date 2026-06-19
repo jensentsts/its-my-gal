@@ -184,8 +184,8 @@ export class GalEngine extends EventEmitter {
             }
             this.state.truncateHistoryLogs(this.state.historyLogs.length - 1);
             const fromChapter = this.state.currentChapterId;
-            // ★ 章节切换 → 清理舞台角色，避免旧角色残留和新角色重复入场动画
-            this._clearStageForChapterChange();
+            // 角色保留在舞台，由新步骤的 characterChanges 显式管理（leave / clearAll）
+            // 不自动清场，避免角色跨章节消失
             this.state.setChapter(step.jumpChapter, 0);
             this.state.setLastSpeaker(null);
             this.emit('chapter:change', { from: fromChapter, to: step.jumpChapter, stepIndex: 0 });
@@ -230,8 +230,7 @@ export class GalEngine extends EventEmitter {
                 return;
             }
             const fromCh = this.state.currentChapterId;
-            // ★ 章节切换 → 清理舞台角色，避免旧角色残留
-            this._clearStageForChapterChange();
+            // 角色保留在舞台，由后续步骤显式管理（leave / clearAll）
             this.state.setChapter(choice.jumpChapter, 0);
             this.state.setLastSpeaker(null);
             this.emit('chapter:change', { from: fromCh, to: choice.jumpChapter, stepIndex: 0 });
@@ -317,8 +316,7 @@ export class GalEngine extends EventEmitter {
                 if (step.jumpChapter) {
                     this.state.truncateHistoryLogs(this.state.historyLogs.length - 1);
                     const fromCh = this.state.currentChapterId;
-                    // ★ 章节切换 → 清理舞台角色，避免旧角色残留
-                    this._clearStageForChapterChange();
+                    // 角色保留在舞台，由后续步骤显式管理
                     this.state.setChapter(step.jumpChapter, 0);
                     this.state.setLastSpeaker(null);
                     this.emit('chapter:change', { from: fromCh, to: step.jumpChapter, stepIndex: 0 });

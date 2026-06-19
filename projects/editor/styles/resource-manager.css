@@ -114,6 +114,65 @@
     font-size: 13px;
 }
 
+/* ── 章节编辑器根节点（填满父容器以支持内嵌 flex 布局） ── */
+.chapter-editor-root {
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── 窗口内侧边栏布局（复用 dock 机制） ── */
+.inner-dock-layout {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    margin-top: 8px;
+}
+
+.inner-dock-left {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+}
+
+.inner-dock-left .section-label {
+    margin-bottom: 6px;
+}
+
+/* 步骤列表在内嵌布局中自适应高度 */
+.inner-dock-left .resource-chapter-steps {
+    max-height: none;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.inner-dock-sidebar {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-left: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+/* 侧边栏内的标签栏与全局 dock 一致 */
+.inner-dock-sidebar .dock-tab-bar {
+    flex-shrink: 0;
+}
+
+/* 步骤编辑内容填满侧边栏，纵向滚动 */
+.inner-dock-sidebar .step-editor-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
 /* ── 资源步骤列表 ── */
 .resource-chapter-steps {
     max-height: 300px;
@@ -150,30 +209,7 @@
     border-left: 3px solid var(--accent-green);
 }
 
-/* ── 资源编辑器（步骤编辑面板） ── */
-.resource-step-editor {
-    width: 480px;
-    border-left: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-    background: var(--bg-secondary);
-}
-.step-editor-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border-color);
-    flex-shrink: 0;
-}
-.step-editor-header .section-label {
-    margin: 0;
-}
-.step-editor-header-actions {
-    display: flex;
-    gap: 4px;
-}
+/* ── 步骤编辑面板内容滚动区（复用为 dock-content 的子元素） ── */
 .step-editor-body {
     flex: 1;
     overflow-y: auto;

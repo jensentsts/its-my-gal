@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎮 GalGame 嵌入演示</title>
+
+    <!-- ⚡ base 指向项目根目录，确保资源 URL 正确解析 -->
+    <base href="../../">
+
+    <!-- Vue 3 CDN（必需，GamePlayer 依赖） -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- JSZip（资源包 ZIP 导入支持） -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <!-- GalGame 样式表（必需） -->
+    <link rel="stylesheet" href="projects/game/app/styles/base.css">
+    <link rel="stylesheet" href="projects/game/app/styles/effects.css">
+    <link rel="stylesheet" href="projects/game/app/styles/game.css">
+    <link rel="stylesheet" href="projects/game/app/styles/menu.css">
+
+    <style>
+        /* ═══════════════════════════════════════════════════
+           演示页面样式（与游戏样式完全隔离）
+           ═══════════════════════════════════════════════════ */
+
+        /* 页面基础 */
+        body.demo-active {
+            overflow: hidden;
+        }
+
+        .demo-landing {
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+            background: linear-gradient(135deg, #0a0a12 0%, #1a1a2e 50%, #0a0a12 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .demo-header {
+            text-align: center;
+            padding: 60px 20px 40px;
+            max-width: 800px;
+        }
+
+        .demo-header h1 {
+            font-size: 2.4em;
+            background: linear-gradient(90deg, #f0c27f, #fc5c7d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 16px;
+        }
+
+        .demo-header p {
+            font-size: 1.1em;
+            color: #999;
+            line-height: 1.8;
+        }
+
+        .demo-header code {
+            background: rgba(255,255,255,0.08);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #f0c27f;
+        }
+
+        .demo-badge {
+            display: inline-block;
+            background: rgba(252, 92, 125, 0.2);
+            border: 1px solid rgba(252, 92, 125, 0.3);
+            color: #fc5c7d;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin-bottom: 20px;
+        }
+
+        .demo-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+            max-width: 800px;
+            width: 90%;
+            margin: 20px auto;
+        }
+
+        .demo-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .demo-card .icon { font-size: 2em; margin-bottom: 8px; }
+        .demo-card h3 { font-size: 1em; color: #fff; margin-bottom: 6px; }
+        .demo-card p { font-size: 0.85em; color: #888; line-height: 1.5; }
+
+        .launch-area {
+            margin: 40px 0 60px;
+            text-align: center;
+        }
+
+        .btn-launch {
+            background: linear-gradient(135deg, #fc5c7d, #f0c27f);
+            border: none;
+            color: #fff;
+            font-size: 1.2em;
+            padding: 16px 48px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 24px rgba(252, 92, 125, 0.3);
+        }
+
+        .btn-launch:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 32px rgba(252, 92, 125, 0.5);
+        }
+
+        .code-block {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 16px 20px;
+            max-width: 700px;
+            width: 90%;
+            margin: 10px auto 40px;
+            font-family: "Fira Code", "Consolas", monospace;
+            font-size: 0.85em;
+            color: #ccc;
+            overflow-x: auto;
+        }
+
+        .code-block .keyword { color: #c792ea; }
+        .code-block .string { color: #c3e88d; }
+        .code-block .fn { color: #82aaff; }
+
+        .demo-footer {
+            color: #555;
+            font-size: 0.8em;
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ═══════════════════════════════════════════════════
+           游戏嵌入容器
+           - 全屏覆盖，放置游戏实例
+           - z-index 高于演示页面
+           ═══════════════════════════════════════════════════ */
+        .game-embed-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background: #000;
+        }
+
+        .game-embed-overlay.active {
+            display: block;
+        }
+
+        /* 游戏挂载点：占满整个 overlay */
+        #game-mount-point {
+            position: absolute;
+            inset: 0;
+        }
+
+        /* 退出按钮：浮动在游戏之上 */
+        .embed-exit-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 10001;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            backdrop-filter: blur(8px);
+            transition: background 0.2s;
+        }
+
+        .embed-exit-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        /* 游戏玩家的根元素：占满容器 */
+        .game-player-root {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <!-- ═══════════════════════════════════════════════════════
+         演示页面内容
+         ═══════════════════════════════════════════════════════ -->
+    <div class="demo-landing">
+        <div class="demo-header">
+            <div class="demo-badge">🧪 技术演示</div>
+            <h1>像播视频一样嵌入 GalGame</h1>
+            <p>
+                这个页面展示了 <code>mountGamePlayer(container, storyData)</code> 的能力。<br>
+                点击下方按钮，一个完整的 GalGame 实例将嵌入到这个页面中。
+            </p>
+            <p style="font-size:0.9em; color:#777; margin-top:12px;">
+                无需 iframe、无框架锁定、每个实例完全隔离。
+            </p>
+        </div>
+
+        <div class="demo-cards">
+            <div class="demo-card">
+                <div class="icon">🎯</div>
+                <h3>任意容器挂载</h3>
+                <p>传入任意 DOM 元素，游戏就在哪里渲染。不依赖特定 #app 元素。</p>
+            </div>
+            <div class="demo-card">
+                <div class="icon">📦</div>
+                <h3>数据即参数</h3>
+                <p>游戏数据通过 props 注入，不硬编码 import。同一个页面内可挂载不同数据。</p>
+            </div>
+            <div class="demo-card">
+                <div class="icon">🧹</div>
+                <h3>完整生命周期</h3>
+                <p>unmount() 可完全销毁实例，不残留事件监听或 DOM。</p>
+            </div>
+        </div>
+
+        <div class="code-block">
+            <span class="keyword">import</span> { mountGamePlayer } <span class="keyword">from</span> <span class="string">'@galgame/game'</span>;
+            <br><br>
+            <span class="keyword">const</span> player = mountGamePlayer(<span class="string">'#container'</span>, storyData);
+            <br><br>
+            player.getEngine()  <span class="comment" style="color:#666;">// → GalEngine 实例，可直接控制</span>
+            <br>
+            player.unmount()    <span class="comment" style="color:#666;">// → 完全销毁</span>
+        </div>
+
+        <div class="launch-area">
+            <button class="btn-launch" id="launchBtn">🎬 启动游戏演示</button>
+        </div>
+
+        <div class="demo-footer">
+            GalEngine v0.1.2 · Vue 3 · 框架无关内核
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         游戏嵌入容器
+         ═══════════════════════════════════════════════════════ -->
+    <div class="game-embed-overlay" id="gameOverlay">
+        <!-- 退出按钮（在 Vue 托管区域之外） -->
+        <button class="embed-exit-btn" id="exitBtn">✕ 退出演示</button>
+        <!-- Vue game player 挂载点 -->
+        <div id="game-mount-point"></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         应用入口：嵌入游戏
+         ═══════════════════════════════════════════════════════ -->
+    <script type="module">
+        // ── 导入游戏数据（和正式游戏同一份） ──
+        // 用 / 开头的绝对路径，不受 <base> 影响，也绕过 bare specifier 限制
+        import * as GameData from '/resource-packs/default/index.js';
+        import { mountGamePlayer } from '/projects/game/app/mount-game.js';
+
+        let player = null;
+
+        // 启动按钮
+        document.getElementById('launchBtn').addEventListener('click', () => {
+            if (player) return; // 防止重复挂载
+
+            const overlay = document.getElementById('gameOverlay');
+            overlay.classList.add('active');
+            document.body.classList.add('demo-active');
+
+            // ═══ 关键代码：像播视频一样嵌入游戏 ═══
+            player = mountGamePlayer('#game-mount-point', GameData, {
+                autoStart: false,
+            });
+
+            console.log('[Demo] 游戏已嵌入！引擎实例:', player.getEngine());
+        });
+
+        // 退出按钮
+        document.getElementById('exitBtn').addEventListener('click', () => {
+            if (!player) return;
+
+            // 完全销毁游戏实例
+            player.unmount();
+            player = null;
+
+            const overlay = document.getElementById('gameOverlay');
+            overlay.classList.remove('active');
+            document.body.classList.remove('demo-active');
+
+            console.log('[Demo] 游戏已销毁，页面回到初始状态');
+        });
+    </script>
+</body>
+</html>

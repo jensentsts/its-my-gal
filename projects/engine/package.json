@@ -1,6 +1,6 @@
 {
   "name": "@galgame/engine",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "GalEngine - Framework-agnostic visual novel engine core",
   "type": "module",
   "main": "./index.js",

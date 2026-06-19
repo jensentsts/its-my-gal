@@ -16,6 +16,7 @@
  */
 
 const { reactive, computed } = Vue;
+import { createPanelHost } from './panel-host.js';
 
 export function createWindowManager() {
   // ── 窗口默认定义 ──
@@ -58,30 +59,34 @@ export function createWindowManager() {
     };
   }
 
-  // ── 边栏系统 ──
-  const docks = reactive({
-    left: [],
-    right: [],
-    bottom: [],
-  });
-
-  // 当前活跃的边栏标签索引
+  // ── 边栏系统（基于通用 panel-host） ──
+  const dockHosts = {
+    left: createPanelHost(),
+    right: createPanelHost(),
+    bottom: createPanelHost(),
+  };
+  const docks = {
+    left: dockHosts.left.panels,
+    right: dockHosts.right.panels,
+    bottom: dockHosts.bottom.panels,
+  };
+  // dockActiveIdx 是 reactive(ref) 属性，Vue 自动解包，模板可直接读写
   const dockActiveIdx = reactive({
-    left: 0,
-    right: 0,
-    bottom: 0,
+    left: dockHosts.left.activeIdx,
+    right: dockHosts.right.activeIdx,
+    bottom: dockHosts.bottom.activeIdx,
   });
 
   function setDockActive(side, idx) {
-    if (idx >= 0 && idx < docks[side].length) dockActiveIdx[side] = idx;
+    dockHosts[side].activateAt(idx);
   }
 
   // 边栏里每个条目的结构: { id, title, icon, width/height, _restoreState }
   function dockWindow(id, side) {
     const w = windows[id];
     if (!w) return;
-    const exists = docks[side].findIndex(e => e.id === id);
-    if (exists >= 0) { setDockActive(side, exists); return; }
+    const host = dockHosts[side];
+    if (host.has(id)) { host.activate(id); return; }
     const entry = reactive({
       id, side,
       title: w.title, icon: w.icon,
@@ -94,18 +99,15 @@ export function createWindowManager() {
     };
     w.visible = false;
     w.maximized = false;
-    docks[side].push(entry);
-    setDockActive(side, docks[side].length - 1);
+    host.add(entry);
   }
 
   function undockDockItem(side, index) {
-    const entry = docks[side][index];
+    const host = dockHosts[side];
+    const entry = host.panels[index];
     if (!entry) return;
     const id = entry.id;
-    // 从 dock 中移除
-    docks[side].splice(index, 1);
-    // 调整 activeIndex
-    if (dockActiveIdx[side] >= docks[side].length) dockActiveIdx[side] = Math.max(0, docks[side].length - 1);
+    host.removeAt(index);
     // 恢复窗口
     const w = windows[id];
     if (w && entry._restoreState) {
@@ -122,19 +124,11 @@ export function createWindowManager() {
   }
 
   function moveDockItem(side, fromIndex, toIndex) {
-    const arr = docks[side];
-    if (fromIndex < 0 || fromIndex >= arr.length) return;
-    if (toIndex < 0 || toIndex >= arr.length) return;
-    const [item] = arr.splice(fromIndex, 1);
-    arr.splice(toIndex, 0, item);
-    if (dockActiveIdx[side] === fromIndex) dockActiveIdx[side] = toIndex;
+    dockHosts[side].move(fromIndex, toIndex);
   }
 
   function isDocked(id) {
-    for (const side of ['left', 'right', 'bottom']) {
-      if (docks[side].some(e => e.id === id)) return true;
-    }
-    return false;
+    return !!dockHosts.left.has(id) || !!dockHosts.right.has(id) || !!dockHosts.bottom.has(id);
   }
 
   // ── 窗口操作 ──
@@ -145,6 +139,15 @@ export function createWindowManager() {
     for (const side of ['left', 'right', 'bottom']) {
       const idx = docks[side].findIndex(e => e.id === id);
       if (idx >= 0) { undockDockItem(side, idx); break; }
+    }
+    // 重置到默认位置（关闭再打开时恢复到初始位置）
+    const def = DEFAULTS[id];
+    if (def) {
+      w.x = def.x; w.y = def.y;
+      w.width = def.width; w.height = def.height;
+      w.maximized = false;
+      w._restoreX = def.x; w._restoreY = def.y;
+      w._restoreW = def.width; w._restoreH = def.height;
     }
     w.visible = true;
     w.zIndex = nextZ++;
@@ -205,6 +208,9 @@ export function createWindowManager() {
     BOTTOM: 80,     // 底部贴靠 → 底边栏停靠
     RESTORE_DOWN: 30, // 全屏状态下下拉恢复阈值
   };
+  const TOOLBAR_HEIGHT = 48;    // editor-toolbar 实际高度
+  const TITLEBAR_HEIGHT = 38;   // window-header min-height
+  const MIN_WIN_Y = Math.max(0, TOOLBAR_HEIGHT - TITLEBAR_HEIGHT); // 标题栏底部不超出顶栏
 
   // ── 贴靠预览状态 ──
   const snapPreview = reactive({
@@ -290,7 +296,7 @@ export function createWindowManager() {
 
       // 正常拖拽移动
       let newX = Math.max(0, dragState.origX + dx);
-      let newY = Math.max(0, dragState.origY + dy);
+      let newY = Math.max(MIN_WIN_Y, dragState.origY + dy);
       ww.x = newX; ww.y = newY;
 
       // 贴靠预览检测
@@ -382,7 +388,7 @@ export function createWindowManager() {
       if (edge.includes('s')) h = Math.max(ww.minHeight, resizeState.origH + dy);
       if (edge.includes('n')) { const nh = Math.max(ww.minHeight, resizeState.origH - dy); y = resizeState.origY + (resizeState.origH - nh); h = nh; }
 
-      ww.x = Math.max(0, x); ww.y = Math.max(0, y);
+      ww.x = Math.max(0, x); ww.y = Math.max(MIN_WIN_Y, y);
       ww.width = w; ww.height = h;
     }
     function onUp() { cleanup(); }

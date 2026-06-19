@@ -38,10 +38,28 @@ import { createPreview } from './ui/preview.js';
 import { createExportImport } from './ui/export-import.js';
 import { createTerminal } from './ui/terminal.js';
 import { createWindowManager } from './ui/window-manager.js';
+import { mountGamePlayer } from '../game/app/mount-game.js';
 
-const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
+const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, provide } = Vue;
 
-createApp({
+// ══════════════════════════════════════════════════════════════
+//  Component registrations (loaded after app creation)
+// ══════════════════════════════════════════════════════════════
+import ToastNotification from './components/ToastNotification.js';
+import ExportModal from './components/ExportModal.js';
+import GlobalContextMenu from './components/GlobalContextMenu.js';
+import TerminalPanel from './components/TerminalPanel.js';
+import EditorToolbar from './components/EditorToolbar.js';
+import TreeCanvas from './components/TreeCanvas.js';
+import StepDetailPanel from './components/StepDetailPanel.js';
+import DetailPanel from './components/DetailPanel.js';
+import GameSettingsWindow from './components/GameSettingsWindow.js';
+import ResourceManagerWindow from './components/ResourceManagerWindow.js';
+import ResourceCharEffectEditor from './components/ResourceCharEffectEditor.js';
+import ResourceEffectEditor from './components/ResourceEffectEditor.js';
+import ResourceChapterStepEditor from './components/ResourceChapterStepEditor.js';
+
+const app = createApp({
     setup() {
         // ══════════════════════════════════════════════════════════════
         //  1. 游戏数据
@@ -83,9 +101,15 @@ createApp({
         const panning = reactive({ active:false, startX:0, startY:0, origPanX:0, origPanY:0 });
         const selection = reactive({ active:false, startX:0, startY:0, endX:0, endY:0 });
         const selectedNodeIds = reactive({});
-        const contextMenu = reactive({ show:false, x:0, y:0, nodeId:null, groupId:null, worldX:0, worldY:0 });
+        const contextMenu = reactive({ show:false, x:0, y:0, nodeId:null, groupId:null, worldX:0, worldY:0, zIndex:100 });
         // 窗口管理器（取代旧有的模态弹窗系统）
         const windowManager = createWindowManager();
+        // 注册调试窗口
+        windowManager.register('gameDebug', {
+            title: '游戏调试', icon: '🎮',
+            x: 40, y: 40, width: 1200, height: 800,
+            minWidth: 800, minHeight: 600,
+        });
         const showGameSettings = windowManager.compat.gameSettings;
         const showResourceManager = windowManager.compat.resourceManager;
 
@@ -97,7 +121,7 @@ createApp({
         const editingGlobalSearch = ref(false);
         const globalSearchQuery = ref('');
         const globalSearchInput = ref(null);
-        const globalContextMenu = reactive({ show:false, x:0, y:0, focusIndex:0 });
+        const globalContextMenu = reactive({ show:false, x:0, y:0, focusIndex:0, zIndex:1000 });
         const showZoomInput = ref(false);
         const zoomPercent = ref(100);
         const detailPanelCollapsed = ref(false);
@@ -108,6 +132,7 @@ createApp({
         const stepListFocusIndex = ref(0);
         const showFileMenu = ref(false);
         const selectedSpriteId = ref(null);
+        const selectedAvatarIdx = ref(-1);
         const showAvatarSection = ref(false);
         const resourceImageTarget = ref(null);
         // 头像编辑列表 —— 将 avatars 对象转成数组，支持稳定的响应式双向绑定
@@ -315,7 +340,7 @@ createApp({
             customEffects, effectPreviewRef, effectPreviewActive,
             editingCharEffect, charEffectPreviewRef, charEffectPreviewActive,
             customCharEffects,
-            selectedSpriteId, showAvatarSection, avatarList,
+            selectedSpriteId, selectedAvatarIdx, showAvatarSection, avatarList,
             resourceImageTarget,
             globalContextMenu, editingGlobalSearch, globalSearchQuery, globalSearchInput,
             portDragging, resizingNode,
@@ -392,7 +417,14 @@ createApp({
                     if (enNode && ops.zoomToNode) ops.zoomToNode(enNode);
                     break;
                 case 'resource':
-                    showResourceManager.value = true;
+                    // 打开资源管理器但不改变窗口状态（位置/全屏/最大化）
+                    {
+                        const w = windowManager.windows.resourceManager;
+                        if (w) {
+                            if (!w.visible) w.visible = true;
+                            windowManager.focusWindow('resourceManager');
+                        }
+                    }
                     resourceTab.value = subId || 'characters';
                     selectedResourceId.value = id;
                     break;
@@ -500,6 +532,126 @@ createApp({
 
 
         // ══════════════════════════════════════════════════════════════
+        //  游戏调试窗口
+        // ══════════════════════════════════════════════════════════════
+        let _debugPlayer = null;
+        const DEBUG_STYLE_IDS = ['gal-debug-base','gal-debug-effects','gal-debug-game','gal-debug-menu'];
+        const DEBUG_STYLE_URLS = [
+            'projects/game/app/styles/base.css',
+            'projects/game/app/styles/effects.css',
+            'projects/game/app/styles/game.css',
+            'projects/game/app/styles/menu.css',
+        ];
+
+        function _injectDebugStyles() {
+            for (let i = 0; i < DEBUG_STYLE_URLS.length; i++) {
+                if (!document.getElementById(DEBUG_STYLE_IDS[i])) {
+                    const link = document.createElement('link');
+                    link.id = DEBUG_STYLE_IDS[i];
+                    link.rel = 'stylesheet';
+                    link.href = DEBUG_STYLE_URLS[i];
+                    document.head.appendChild(link);
+                }
+            }
+            // 覆盖 CSS：让游戏容器化，不从固定定位溢出
+            if (!document.getElementById('gal-debug-override')) {
+                const style = document.createElement('style');
+                style.id = 'gal-debug-override';
+                style.textContent = `
+                    .game-debug-body {
+                        position: relative !important;
+                    }
+                    .game-debug-body .game-view {
+                        position: absolute !important;
+                        inset: 0 !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                    }
+                    .game-debug-body .menu-view {
+                        position: absolute !important;
+                        inset: 0 !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        min-height: 0 !important;
+                    }
+                    .game-debug-body .game-viewport {
+                        top: 50% !important;
+                        left: 50% !important;
+                    }
+                    .game-debug-body .game-player-root {
+                        width: 100% !important;
+                        height: 100% !important;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        }
+        function _removeDebugStyles() {
+            for (const id of [...DEBUG_STYLE_IDS, 'gal-debug-override']) {
+                const el = document.getElementById(id);
+                if (el) el.remove();
+            }
+        }
+
+        ops.openGameDebug = () => {
+            // 1. 保存当前编辑器数据到 localStorage
+            ops.syncToGame();
+
+            // 2. 注入游戏 CSS + 容器覆盖
+            _injectDebugStyles();
+
+            // 3. 打开窗口并默认最大化
+            windowManager.openWindow('gameDebug');
+            const dw = windowManager.windows.gameDebug;
+            if (dw && !dw.maximized) {
+                windowManager.toggleMaximize('gameDebug');
+            }
+
+            // 4. 挂载游戏实例
+            nextTick(() => {
+                const container = document.getElementById('game-debug-container');
+                if (container && !_debugPlayer) {
+                    try {
+                        _debugPlayer = mountGamePlayer(container, {
+                            STORY_CHAPTERS: JSON.parse(JSON.stringify(chapters)),
+                            CHARACTERS: gameCharacters,
+                            SCENES: gameScenes,
+                            CG_LIBRARY: gameCgLibrary,
+                            ITEMS: gameItems,
+                            ENDINGS: gameEndings,
+                            GAME_CONFIG: gameConfig,
+                            HOME_CONFIG: GameData.HOME_CONFIG,
+                            CHAPTER_DESCRIPTIONS: chapterDescriptions,
+                        }, { loadEditorData: true });
+                        ops.showToast('🎮 调试模式已启动');
+                    } catch (e) {
+                        ops.showToast('❌ 调试启动失败: ' + e.message);
+                        console.error('[Debug] mountGamePlayer error:', e);
+                    }
+                }
+            });
+        };
+
+        ops.closeGameDebug = () => {
+            if (_debugPlayer) {
+                _debugPlayer.unmount();
+                _debugPlayer = null;
+            }
+            _removeDebugStyles();
+            windowManager.closeWindow('gameDebug');
+        };
+
+        // 窗口关闭时自动卸载
+        watch(() => windowManager.windows.gameDebug?.visible, (visible) => {
+            if (!visible && _debugPlayer) {
+                _debugPlayer.unmount();
+                _debugPlayer = null;
+                _removeDebugStyles();
+            }
+        });
+
+
+        // ══════════════════════════════════════════════════════════════
         //  11. 生命周期
         // ══════════════════════════════════════════════════════════════
         const _preventCM = e => e.preventDefault();
@@ -558,7 +710,16 @@ createApp({
             return m[name] || '✨';
         }
 
-        return {
+        // 点击外部时关闭所有弹出菜单
+        ops.closeAllMenus = () => {
+            if (ops.closeContextMenu) ops.closeContextMenu();
+            if (ops.closeGlobalContextMenu) ops.closeGlobalContextMenu();
+        };
+
+        // ══════════════════════════════════════════════════════════
+        //  13. 构建编辑器状态（provide → inject 给子组件）
+        // ══════════════════════════════════════════════════════════
+        const appState = reactive({
             // 数据状态
             ...ctx,
             // 覆盖 selectedEndingPreview（tree-data 中的 stub）
@@ -608,6 +769,30 @@ createApp({
             getWindowStyle: windowManager.getWindowStyle,
             // 所有业务函数
             ...ops,
-        };
+        });
+
+        // Provide editor state so descendant components can inject it
+        provide('editor', appState);
+
+        return appState;
     },
-}).mount('#editor-app');
+});
+
+// ══════════════════════════════════════════════════════════════
+//  Register global components
+// ══════════════════════════════════════════════════════════════
+app.component('toast-notification', ToastNotification);
+app.component('export-modal', ExportModal);
+app.component('global-context-menu', GlobalContextMenu);
+app.component('terminal-panel', TerminalPanel);
+app.component('editor-toolbar', EditorToolbar);
+app.component('tree-canvas', TreeCanvas);
+app.component('step-detail-panel', StepDetailPanel);
+app.component('detail-panel', DetailPanel);
+app.component('game-settings-window', GameSettingsWindow);
+app.component('resource-manager-window', ResourceManagerWindow);
+app.component('resource-char-effect-editor', ResourceCharEffectEditor);
+app.component('resource-effect-editor', ResourceEffectEditor);
+app.component('resource-chapter-step-editor', ResourceChapterStepEditor);
+
+app.mount('#editor-app');

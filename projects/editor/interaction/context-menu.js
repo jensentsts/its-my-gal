@@ -11,6 +11,7 @@ export function createContextMenu(ctx, ops) {
     function onCanvasContextMenu(e) {
         const rect = treePanel.value.getBoundingClientRect();
         contextMenu.show = true; contextMenu.x = e.clientX - rect.left; contextMenu.y = e.clientY - rect.top;
+        contextMenu.zIndex = 100; // 节点区 → 最低
         const wp = screenToWorld(contextMenu.x, contextMenu.y, panX.value, panY.value, viewScale.value);
         contextMenu.worldX = wp.x; contextMenu.worldY = wp.y;
         if (!contextMenu.nodeId) {
@@ -21,6 +22,7 @@ export function createContextMenu(ctx, ops) {
 
     function onNodeContextMenu(e, node) {
         contextMenu.show = true; contextMenu.nodeId = node.id; contextMenu.groupId = null;
+        contextMenu.zIndex = 100; // 节点区 → 最低
         const rect = treePanel.value.getBoundingClientRect();
         contextMenu.x = e.clientX - rect.left; contextMenu.y = e.clientY - rect.top;
         const wp = screenToWorld(contextMenu.x, contextMenu.y, panX.value, panY.value, viewScale.value);
@@ -29,6 +31,7 @@ export function createContextMenu(ctx, ops) {
 
     function onGroupContextMenu(e, groupId) {
         contextMenu.show = true; contextMenu.nodeId = null; contextMenu.groupId = groupId;
+        contextMenu.zIndex = 100; // 节点区 → 最低
         const rect = treePanel.value.getBoundingClientRect();
         contextMenu.x = e.clientX - rect.left; contextMenu.y = e.clientY - rect.top;
         const wp = screenToWorld(contextMenu.x, contextMenu.y, panX.value, panY.value, viewScale.value);
@@ -97,7 +100,22 @@ export function createContextMenu(ctx, ops) {
         closeContextMenu();
     }
 
-    function onGlobalContextMenu(e) { globalContextMenu.show = true; globalContextMenu.x = e.clientX; globalContextMenu.y = e.clientY; }
+    function onGlobalContextMenu(e) {
+        globalContextMenu.show = true;
+        globalContextMenu.x = e.clientX;
+        globalContextMenu.y = e.clientY;
+        // 根据触发元素所在层级动态计算 z-index
+        const parentToolbar = e.target.closest('.editor-toolbar');
+        const parentWin = e.target.closest('.editor-window');
+        if (parentToolbar) {
+            globalContextMenu.zIndex = 10000;        // 顶栏 → 最高
+        } else if (parentWin) {
+            const winZ = parseInt(parentWin.style.zIndex) || 300;
+            globalContextMenu.zIndex = winZ + 100;   // 窗口 → 紧随窗口之上
+        } else {
+            globalContextMenu.zIndex = 100;           // 节点区 → 最低
+        }
+    }
     function closeGlobalContextMenu() { globalContextMenu.show = false; globalContextMenu.focusIndex = 0; }
 
     _watch(() => contextMenu.show, v => { if (v) contextMenuFocusIndex.value = 0; });
