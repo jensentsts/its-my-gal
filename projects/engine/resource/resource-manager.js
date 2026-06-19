@@ -593,8 +593,8 @@ export class ResourceManager {
 
     async _autoScanChapters(chapters, onProgress) {
         const commonIds = ['main', 'prologue', 'meet_elysia', 'forest_explore', 'ruins_exploration',
-            'forest_deep', 'possession_prelude', 'possession_event', 'body_explore',
-            'elysia_life', 'final_choice', 'redemption_route', 'exorcism_route', 'desperate_route'];
+            'forest_deep', 'body_explore',
+            'elysia_life', 'final_choice', 'redemption_route', 'desperate_route'];
 
         let loaded = 0;
         const scanPromises = commonIds.map(async (chId) => {
