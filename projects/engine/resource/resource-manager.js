@@ -592,14 +592,33 @@ export class ResourceManager {
     }
 
     async _autoScanChapters(chapters, onProgress) {
-        const commonIds = ['main', 'prologue', 'meet_elysia', 'forest_explore', 'ruins_exploration',
-            'forest_deep', 'body_explore',
-            'elysia_life', 'final_choice', 'redemption_route', 'desperate_route'];
+        // 尝试读取资源包自身的章节索引文件
+        let chapterIds = [];
+        try {
+            const index = await this._fetchJSON(`${this._basePath}/chapters/index.json`);
+            if (Array.isArray(index)) {
+                chapterIds = index;
+            } else if (index?.chapters) {
+                chapterIds = index.chapters;
+            }
+        } catch {
+            // 无章节索引文件 -> 尝试从 pack.json 的章节声明中获取
+            if (this._manifest?.chapters) {
+                chapterIds = Object.keys(this._manifest.chapters);
+            }
+        }
+
+        if (chapterIds.length === 0) {
+            console.warn('[ResourceManager] 资源包未声明任何章节，请确保 pack.json 中配置 chapters 或提供 chapters/index.json');
+            if (typeof onProgress === 'function') onProgress(0, 1);
+            return;
+        }
 
         let loaded = 0;
-        const scanPromises = commonIds.map(async (chId) => {
+        const scanPromises = chapterIds.map(async (chId) => {
+            const filePath = this._manifest?.chapters?.[chId] || `chapters/${chId}.json`;
             try {
-                const data = await this._fetchJSON(`${this._basePath}/chapters/${chId}.json`);
+                const data = await this._fetchJSON(`${this._basePath}/${filePath}`);
                 chapters[chId] = data;
                 console.log(`[ResourceManager]   自动扫描到章节: ${chId}`);
             } catch {
@@ -607,7 +626,7 @@ export class ResourceManager {
             }
             loaded++;
             if (typeof onProgress === 'function') {
-                onProgress(loaded, commonIds.length, chId);
+                onProgress(loaded, chapterIds.length, chId);
             }
         });
         await Promise.all(scanPromises);
