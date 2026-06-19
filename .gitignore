@@ -32,6 +32,11 @@ packages/*/node_modules/
 *.tmp
 *.log
 
+# Game content (private - not pushed to public repo)
+resource-packs/
+recommend/
+docs/
+
 # Environment / Secrets (API keys, tokens, credentials)
 .env
 .env.*
